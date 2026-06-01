@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle, Code, TableIcon, Minus, Quote, ListTodo, Highlighter, Strikethrough, Undo, Redo, Link2 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
@@ -10,6 +10,16 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
+import CodeBlock from '@tiptap/extension-code-block'
+import { Table as TableExtension } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import TextAlign from '@tiptap/extension-text-align'
+import Highlight from '@tiptap/extension-highlight'
+import CharacterCount from '@tiptap/extension-character-count'
 
 export default function DocumentDetail() {
   const { id } = useParams()
@@ -83,20 +93,38 @@ export default function DocumentDetail() {
     })
   }, [id])
 
-  // 初始化编辑器
+  // 初始化编辑器（语雀风格）
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: {
           levels: [1, 2, 3],
         },
+        codeBlock: false,
       }),
       TextStyle.configure({
         types: ['textStyle'],
       }),
       Color,
+      CodeBlock,
+      TableExtension.configure({
+        resizable: true,
+        useTableHeader: true,
+      }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Highlight.configure({ multicolor: true }),
+      CharacterCount,
     ],
-    content: noteContent,
+    content: noteContent || '<p>开始编写笔记...</p>',
     onUpdate: ({ editor }) => {
       setNoteContent(editor.getHTML())
     },
@@ -104,8 +132,11 @@ export default function DocumentDetail() {
 
   // 当noteContent变化时更新编辑器内容（支持清空）
   useEffect(() => {
-    if (editor) {
+    if (editor === null) return
+    try {
       editor.commands.setContent(noteContent || '')
+    } catch (error) {
+      console.warn('Failed to set editor content:', error)
     }
   }, [noteContent, editor])
 
@@ -303,17 +334,6 @@ export default function DocumentDetail() {
       <div className="flex flex-shrink-0 border-r border-gray-200">
         {/* 第一列：分类和标签管理 */}
         <aside className="w-72 bg-gray-50 border-r border-gray-200">
-          {/* 返回按钮 - 放在文档导航上面 */}
-          <div className="px-4 py-3 border-b border-gray-200">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/documents')}
-              className="w-full justify-start gap-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              返回文档列表
-            </Button>
-          </div>
           <div className="p-4 space-y-4">
             {/* 侧边栏标题 */}
             <div className="flex items-center gap-2 text-gray-700 font-semibold">
@@ -623,6 +643,17 @@ export default function DocumentDetail() {
 
       {/* 第三列：我的笔记 */}
       <aside className="w-96 bg-gray-50 border-l border-gray-200 flex flex-col">
+        {/* 返回按钮 */}
+        <div className="px-4 py-3 border-b border-gray-200">
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/documents')}
+            className="w-full justify-start gap-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回文档列表
+          </Button>
+        </div>
         {/* 笔记头部 */}
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2 text-gray-700 font-semibold">
@@ -648,8 +679,31 @@ export default function DocumentDetail() {
           </div>
         </div>
 
-        {/* 笔记编辑器工具栏 */}
+        {/* 笔记编辑器工具栏（语雀风格） */}
         <div className="px-4 py-2 border-b border-gray-200 flex flex-wrap gap-1">
+          {/* 撤销/重做 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().undo().run()}
+            disabled={!editor || !editor.can().undo()}
+            className="h-7 w-7"
+            title="撤销"
+          >
+            <Undo className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().redo().run()}
+            disabled={!editor || !editor.can().redo()}
+            className="h-7 w-7"
+            title="重做"
+          >
+            <Redo className="w-3.5 h-3.5" />
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
           {/* 字体选择 */}
           <select
             onChange={(e) => editor?.chain().focus().setStyle({ fontFamily: e.target.value || null }).run()}
@@ -681,12 +735,15 @@ export default function DocumentDetail() {
             <option value="32px">32px</option>
           </select>
           <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 文字样式 */}
           <Button
             variant="outline"
             size="icon"
             onClick={() => editor?.chain().focus().toggleBold().run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="粗体"
           >
             <Bold className="w-3.5 h-3.5" />
           </Button>
@@ -696,6 +753,7 @@ export default function DocumentDetail() {
             onClick={() => editor?.chain().focus().toggleItalic().run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="斜体"
           >
             <Italic className="w-3.5 h-3.5" />
           </Button>
@@ -705,16 +763,40 @@ export default function DocumentDetail() {
             onClick={() => editor?.chain().focus().toggleUnderline().run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="下划线"
           >
             <Underline className="w-3.5 h-3.5" />
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().toggleStrike().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="删除线"
+          >
+            <Strikethrough className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().toggleHighlight().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="高亮"
+          >
+            <Highlighter className="w-3.5 h-3.5" />
+          </Button>
           <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 标题 */}
           <Button
             variant="outline"
             size="icon"
             onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="标题1"
           >
             <Heading1 className="w-3.5 h-3.5" />
           </Button>
@@ -724,6 +806,7 @@ export default function DocumentDetail() {
             onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="标题2"
           >
             <Heading2 className="w-3.5 h-3.5" />
           </Button>
@@ -733,16 +816,20 @@ export default function DocumentDetail() {
             onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="标题3"
           >
             <Heading3 className="w-3.5 h-3.5" />
           </Button>
           <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 列表 */}
           <Button
             variant="outline"
             size="icon"
             onClick={() => editor?.chain().focus().toggleBulletList().run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="无序列表"
           >
             <List className="w-3.5 h-3.5" />
           </Button>
@@ -752,8 +839,116 @@ export default function DocumentDetail() {
             onClick={() => editor?.chain().focus().toggleOrderedList().run()}
             disabled={!editor}
             className="h-7 w-7"
+            title="有序列表"
           >
             <ListOrdered className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().toggleTaskList().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="任务列表"
+          >
+            <ListTodo className="w-3.5 h-3.5" />
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 代码块和表格 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="代码块"
+          >
+            <Code className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().insertTable().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="插入表格"
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 引用和分隔线 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="引用"
+          >
+            <Quote className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="分隔线"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 对齐方式 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="左对齐"
+          >
+            <AlignLeft className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="居中"
+          >
+            <AlignCenter className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="右对齐"
+          >
+            <AlignRight className="w-3.5 h-3.5" />
+          </Button>
+          <div className="w-px h-5 bg-gray-200 mx-1"></div>
+          
+          {/* 链接 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              const url = window.prompt('请输入链接地址：')
+              if (url) {
+                editor?.chain().focus().setLink({ href: url }).run()
+              }
+            }}
+            disabled={!editor}
+            className="h-7 w-7"
+            title="插入链接"
+          >
+            <Link2 className="w-3.5 h-3.5" />
           </Button>
         </div>
 
