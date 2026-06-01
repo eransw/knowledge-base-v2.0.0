@@ -1,6 +1,7 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, ManyToMany, JoinTable, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
+import { FileAttachment } from './file-attachment.entity';
 
 @Entity()
 export class Document {
@@ -10,37 +11,25 @@ export class Document {
   @Column()
   title: string;
 
-  @Column()
-  filename: string;
-
-  @Column()
-  originalFilename: string;
-
-  @Column({ nullable: true })
+  @Column('text', { nullable: true })
   content: string;
 
   @Column({ nullable: true })
-  summary: string;
+  description: string;
 
-  @Column()
-  fileType: string;
-
-  @Column()
-  filePath: string;
-
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
-  createdAt: Date;
-
-  @Column({ nullable: true })
-  updatedAt: Date;
-
-  @ManyToOne(() => Category, (category) => category.documents)
+  @ManyToOne(() => Category, (category) => category.documents, { nullable: true })
   category: Category;
-
-  @Column({ nullable: true })
-  categoryId: number;
 
   @ManyToMany(() => Tag)
   @JoinTable()
   tags: Tag[];
+
+  @OneToMany(() => FileAttachment, (attachment) => attachment.document, { cascade: true })
+  attachments: FileAttachment[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

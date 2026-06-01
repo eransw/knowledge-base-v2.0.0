@@ -16,6 +16,11 @@ export class CategoryController {
     return this.categoryService.getTree();
   }
 
+  @Get('doc-count')
+  getDocumentCount() {
+    return this.categoryService.getDocumentCount();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.categoryService.findOne(+id);

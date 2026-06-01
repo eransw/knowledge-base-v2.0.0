@@ -1,18 +1,21 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { ConfigProvider } from './context/ConfigContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Documents from './pages/Documents'
 import DocumentDetail from './pages/DocumentDetail'
 import Categories from './pages/Categories'
 import Tags from './pages/Tags'
+import SystemConfig from './pages/SystemConfig'
 import Layout from './components/Layout'
 
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <ConfigProvider>
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/" element={<Layout />}>
@@ -21,9 +24,11 @@ function App() {
             <Route path="documents/:id" element={<DocumentDetail />} />
             <Route path="categories" element={<Categories />} />
             <Route path="tags" element={<Tags />} />
+            <Route path="system-config" element={<SystemConfig />} />
           </Route>
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </ConfigProvider>
     </AuthProvider>
   )
 }

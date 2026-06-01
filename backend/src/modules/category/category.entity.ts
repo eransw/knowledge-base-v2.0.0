@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, OneToMany, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { Document } from '../document/document.entity';
 
 @Entity()
@@ -9,9 +9,6 @@ export class Category {
   @Column()
   name: string;
 
-  @Column({ nullable: true })
-  parentId: number;
-
   @ManyToOne(() => Category, (category) => category.children)
   parent: Category;
 
@@ -21,9 +18,12 @@ export class Category {
   @OneToMany(() => Document, (document) => document.category)
   documents: Document[];
 
-  @Column({ default: 0 })
+  @Column({ type: 'float', default: 0 })
   order: number;
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

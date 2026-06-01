@@ -1,5 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToMany } from 'typeorm';
-import { Document } from '../document/document.entity';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity()
 export class Tag {
@@ -9,12 +8,15 @@ export class Tag {
   @Column({ unique: true })
   name: string;
 
+  @Column({ default: '#6366f1' })
+  color: string;
+
   @Column({ default: 0 })
   order: number;
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToMany(() => Document, (document) => document.tags)
-  documents: Document[];
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

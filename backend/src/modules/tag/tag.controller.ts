@@ -21,6 +21,11 @@ export class TagController {
     return this.tagService.create(tag);
   }
 
+  @Put('order')
+  updateOrder(@Body() body: { order: { id: number; order: number }[] }) {
+    return this.tagService.updateOrder(body.order);
+  }
+
   @Put(':id')
   update(@Param('id') id: string, @Body() tag: Partial<Tag>) {
     return this.tagService.update(+id, tag);

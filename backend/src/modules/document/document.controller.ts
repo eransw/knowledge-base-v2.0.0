@@ -1,15 +1,56 @@
-import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFile, Query, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, Query, Put, Inject, Res, Req } from '@nestjs/common';
+import { Response, Request } from 'express';
+import * as fs from 'fs';
 import { DocumentService } from './document.service';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import * as path from 'path';
+import { Repository, In } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Category } from '../category/category.entity';
+import { Tag } from '../tag/tag.entity';
+import { FileAttachment } from './file-attachment.entity';
+
+// 自定义 multer 配置，正确处理中文文件名
+const storage = diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '..', '..', '..', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // 使用时间戳作为存储文件名
+    const ext = path.extname(file.originalname);
+    const filename = `${Date.now()}${ext}`;
+    cb(null, filename);
+  },
+});
+
+
 
 @Controller('documents')
 export class DocumentController {
-  constructor(private documentService: DocumentService) {}
+  constructor(
+    private documentService: DocumentService,
+    @InjectRepository(Category)
+    private categoryRepository: Repository<Category>,
+    @InjectRepository(Tag)
+    private tagRepository: Repository<Tag>,
+    @InjectRepository(FileAttachment)
+    private fileAttachmentRepository: Repository<FileAttachment>,
+  ) {}
 
   @Get()
-  findAll() {
-    return this.documentService.findAll();
+  findAll(
+    @Query('categoryId') categoryId?: string,
+    @Query('tagIds') tagIds?: string
+  ) {
+    return this.documentService.findAll(
+      categoryId ? parseInt(categoryId) : undefined,
+      tagIds || undefined
+    );
   }
 
   @Get(':id')
@@ -23,32 +64,233 @@ export class DocumentController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: any, @Body() body: any) {
+  @UseInterceptors(FilesInterceptor('files', 10, { storage }))
+  async uploadFiles(@UploadedFiles() files: any[], @Body() body: any, @Req() req: Request) {
     const uploadDir = path.join(__dirname, '..', '..', '..', 'uploads');
-    const { filePath, filename } = await this.documentService.saveFile(file, uploadDir);
     
-    const content = await this.documentService.parseFile(filePath, file.mimetype);
+    // 保存所有附件
+    const attachments: FileAttachment[] = [];
+    let mainContent = '';
     
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // 直接使用 multer 生成的文件名和路径
+      const filename = file.filename;
+      const filePath = file.path;
+      
+      // 使用 Base64 解码文件名
+      let originalFilename = file.originalname;
+      try {
+        // 尝试 Base64 解码
+        const decoded = Buffer.from(file.originalname, 'base64').toString('utf-8');
+        // 如果解码结果看起来像有效的文件名（包含扩展名）
+        if (decoded.includes('.') && decoded.length > 1) {
+          // 尝试 URI 解码
+          originalFilename = decodeURIComponent(decoded);
+        }
+      } catch (e) {
+        // 如果解码失败，使用原始文件名
+      }
+      
+      // 尝试解析文本文件内容
+      if (file.mimetype.includes('text') || 
+          file.mimetype.includes('pdf') || 
+          file.mimetype.includes('word') ||
+          file.mimetype.includes('markdown')) {
+        const content = await this.documentService.parseFile(filePath, file.mimetype);
+        if (content) {
+          mainContent += content + '\n\n';
+        }
+      }
+      
+      attachments.push({
+        filename,
+        originalFilename,
+        filePath,
+        fileType: file.mimetype,
+        fileSize: file.size,
+      } as FileAttachment);
+    }
+    
+    // 获取分类
+    let category = null;
+    if (body.categoryId) {
+      const categoryId = parseInt(body.categoryId, 10);
+      if (!isNaN(categoryId) && categoryId > 0) {
+        category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+      }
+    }
+    
+    // 获取标签
+    let tags: Tag[] = [];
+    if (body.tagIds) {
+      try {
+        const tagIds = JSON.parse(body.tagIds);
+        console.log('Received tagIds:', tagIds);
+        tags = await this.tagRepository.findBy({ id: In(tagIds) });
+        console.log('Found tags:', tags);
+      } catch (e) {
+        console.error('Failed to parse tagIds:', e);
+      }
+    }
+    
+    // 使用第一个文件的名称作为文档标题
+    const firstFile = files[0];
     return this.documentService.create({
-      title: body.title || file.originalname,
-      filename,
-      originalFilename: file.originalname,
-      content,
-      summary: content.substring(0, 200) + (content.length > 200 ? '...' : ''),
-      fileType: file.mimetype,
-      filePath,
-      categoryId: body.categoryId ? +body.categoryId : null,
+      title: body.title || firstFile?.originalname || '未命名文档',
+      content: body.description || mainContent,
+      description: body.description,
+      category,
+      tags,
+      attachments,
     });
   }
 
-  @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.documentService.update(+id, body);
-  }
+  @Post(':id')
+  @UseInterceptors(FilesInterceptor('files', 10, { storage }))
+  async update(
+    @Param('id') id: string,
+    @Body() body: any,
+    @UploadedFiles() files?: any[]
+  ) {
+    try {
+      const updateData: any = {};
+    
+    if (body.title !== undefined) {
+      updateData.title = body.title;
+    }
+    if (body.description !== undefined) {
+      updateData.description = body.description;
+    }
+    
+    // 处理分类
+    if (body.categoryId !== undefined) {
+      const categoryId = parseInt(body.categoryId, 10);
+      if (!isNaN(categoryId) && categoryId > 0) {
+        updateData.category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+      } else if (body.categoryId === null || body.categoryId === '') {
+        updateData.category = null;
+      }
+    }
+    
+    // 处理标签
+    if (body.tagIds) {
+      try {
+        const tagIds = JSON.parse(body.tagIds);
+        const tags = await this.tagRepository.findBy({ id: In(tagIds) });
+        updateData.tags = tags;
+      } catch (e) {
+        console.error('Failed to parse tagIds:', e);
+      }
+    }
+    
+    // 处理附件删除
+    if (body.removeAttachmentIds) {
+      try {
+        const removeIds = JSON.parse(body.removeAttachmentIds);
+        for (const attachmentId of removeIds) {
+          const attachment = await this.fileAttachmentRepository.findOne({ where: { id: attachmentId } });
+          if (attachment && attachment.filePath && fs.existsSync(attachment.filePath)) {
+            fs.unlinkSync(attachment.filePath);
+          }
+          await this.fileAttachmentRepository.delete(attachmentId);
+        }
+      } catch (e) {
+        console.error('Failed to delete attachments:', e);
+      }
+    }
+    
+    // 更新文档基本信息
+    let document = await this.documentService.update(+id, updateData);
+    
+    // 处理新附件上传
+    if (files && files.length > 0) {
+      console.log('=== Adding attachments in controller ===');
+      console.log('Number of files:', files.length);
+      console.log('Document ID:', id);
+      console.log('=== Adding new attachments ===');
+      console.log('Number of files to add:', files.length);
+      // 使用文档ID重新获取最新的文档对象来添加附件
+      await this.documentService.addAttachments(+id, files);
+      console.log('=== Attachments added successfully ===');
+      // 重新获取文档以包含新附件
+      document = await this.documentService.findOne(+id);
+    } else {
+      console.log('=== No files to add ===');
+      console.log('Files variable:', files);
+    }
+    
+    console.log('=== Returning updated document ===');
+    console.log('Attachments count:', document.attachments?.length || 0);
+    return document;
+      } catch (error) {
+        console.error('Update document error:', error);
+        throw error;
+      }
+    }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.documentService.remove(+id);
+  async remove(@Param('id') id: string) {
+    try {
+      await this.documentService.remove(+id);
+      return { success: true, message: '删除成功' };
+    } catch (error) {
+      console.error('Delete document error:', error);
+      throw error;
+    }
+  }
+
+  @Delete('attachment/:attachmentId')
+  async removeAttachment(@Param('attachmentId') attachmentId: string) {
+    try {
+      const attachment = await this.fileAttachmentRepository.findOne({ where: { id: +attachmentId } });
+      if (attachment && attachment.filePath && fs.existsSync(attachment.filePath)) {
+        fs.unlinkSync(attachment.filePath);
+      }
+      await this.fileAttachmentRepository.delete(+attachmentId);
+      return { success: true, message: '删除成功' };
+    } catch (error) {
+      console.error('Delete attachment error:', error);
+      throw error;
+    }
+  }
+
+  @Get('download/:attachmentId')
+  async downloadAttachment(@Param('attachmentId') attachmentId: string, @Res() res: Response) {
+    const attachment = await this.documentService.getAttachment(+attachmentId);
+    if (!attachment) {
+      res.status(404).send('附件不存在');
+      return;
+    }
+    
+    const filePath = attachment.filePath;
+    if (!fs.existsSync(filePath)) {
+      res.status(404).send('文件不存在');
+      return;
+    }
+    
+    res.setHeader('Content-Type', attachment.fileType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(attachment.originalFilename)}"`);
+    res.sendFile(filePath);
+  }
+
+  @Get('preview/:attachmentId')
+  async previewAttachment(@Param('attachmentId') attachmentId: string, @Res() res: Response) {
+    const attachment = await this.documentService.getAttachment(+attachmentId);
+    if (!attachment) {
+      res.status(404).send('附件不存在');
+      return;
+    }
+    
+    const filePath = attachment.filePath;
+    if (!fs.existsSync(filePath)) {
+      res.status(404).send('文件不存在');
+      return;
+    }
+    
+    res.setHeader('Content-Type', attachment.fileType);
+    // 不设置 Content-Disposition 或设置为 inline，允许浏览器预览
+    res.setHeader('Content-Disposition', 'inline');
+    res.sendFile(filePath);
   }
 }

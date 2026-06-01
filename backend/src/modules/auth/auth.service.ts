@@ -40,8 +40,14 @@ export class AuthService {
     const { username, password } = loginDto;
     const user = await this.userRepository.findOneBy({ username });
     
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new UnauthorizedException('用户名或密码错误');
+    // 先检查用户是否存在
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+    
+    // 再检查密码是否正确
+    if (!(await bcrypt.compare(password, user.password))) {
+      throw new UnauthorizedException('密码错误');
     }
     
     const payload = { username: user.username, sub: user.id };

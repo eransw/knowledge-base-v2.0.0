@@ -27,10 +27,12 @@ export function AuthProvider({ children }) {
       localStorage.setItem('user', JSON.stringify(userData))
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(userData)
-      return true
+      return { success: true }
     } catch (error) {
       console.error('Login failed:', error)
-      return false
+      // 返回后端的错误消息
+      const errorMessage = error.response?.data?.message || '登录失败'
+      return { success: false, message: errorMessage }
     }
   }
 

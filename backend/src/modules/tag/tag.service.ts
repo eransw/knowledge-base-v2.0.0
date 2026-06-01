@@ -36,6 +36,12 @@ export class TagService {
     await this.tagRepository.delete(id);
   }
 
+  async updateOrder(orderData: { id: number; order: number }[]): Promise<void> {
+    for (const item of orderData) {
+      await this.tagRepository.update(item.id, { order: item.order });
+    }
+  }
+
   async getOrCreate(names: string[]): Promise<Tag[]> {
     const tags: Tag[] = [];
     for (const name of names) {
