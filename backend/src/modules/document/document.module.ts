@@ -11,5 +11,6 @@ import { DocumentController } from './document.controller';
   imports: [TypeOrmModule.forFeature([Document, FileAttachment, Category, Tag])],
   providers: [DocumentService],
   controllers: [DocumentController],
+  exports: [DocumentService],
 })
 export class DocumentModule {}

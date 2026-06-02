@@ -8,6 +8,7 @@ import DocumentDetail from './pages/DocumentDetail'
 import Categories from './pages/Categories'
 import Tags from './pages/Tags'
 import SystemConfig from './pages/SystemConfig'
+import AIConfig from './pages/AIConfig'
 import Layout from './components/Layout'
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
             <Route path="documents/:id" element={<DocumentDetail />} />
             <Route path="categories" element={<Categories />} />
             <Route path="tags" element={<Tags />} />
+            <Route path="ai-config" element={<AIConfig />} />
             <Route path="system-config" element={<SystemConfig />} />
           </Route>
         </Routes>

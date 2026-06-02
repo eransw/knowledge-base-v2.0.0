@@ -6,6 +6,7 @@ import { CategoryModule } from './modules/category/category.module';
 import { TagModule } from './modules/tag/tag.module';
 import { ConfigModule } from './modules/config/config.module';
 import { NoteModule } from './modules/note/note.module';
+import { AiModule } from './modules/ai/ai.module';
 import * as path from 'path';
 
 @Module({
@@ -22,6 +23,7 @@ import * as path from 'path';
     TagModule,
     ConfigModule,
     NoteModule,
+    AiModule,
   ],
 })
 export class AppModule {}

@@ -10,7 +10,8 @@ import {
   X,
   User,
   ChevronDown,
-  Settings
+  Settings,
+  Bot
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from './ui/button'
@@ -34,6 +35,7 @@ export default function Layout() {
     { icon: BookOpen, label: '文档', path: '/documents' },
     { icon: FolderOpen, label: '分类', path: '/categories' },
     { icon: Tag, label: '标签', path: '/tags' },
+    { icon: Bot, label: 'AI配置', path: '/ai-config' },
     { icon: Settings, label: '系统配置', path: '/system-config' },
   ]
 

@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/badge'
 import { Dialog } from '../components/ui/Dialog'
 import { useEditor, EditorContent } from '@tiptap/react'
+import AIChat from '../components/AIChat'
 import StarterKit from '@tiptap/starter-kit'
-import { TextStyle } from '@tiptap/extension-text-style'
+import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
 import CodeBlock from '@tiptap/extension-code-block'
 import { Table as TableExtension } from '@tiptap/extension-table'
@@ -105,6 +106,8 @@ export default function DocumentDetail() {
       TextStyle.configure({
         types: ['textStyle'],
       }),
+      FontFamily,
+      FontSize,
       Color,
       CodeBlock,
       TableExtension.configure({
@@ -132,11 +135,24 @@ export default function DocumentDetail() {
 
   // 当noteContent变化时更新编辑器内容（支持清空）
   useEffect(() => {
-    if (editor === null) return
+    // 使用严格的null检查
+    if (!editor || editor === null || typeof editor !== 'object') return
+    
+    let commands = null
     try {
-      editor.commands.setContent(noteContent || '')
-    } catch (error) {
-      console.warn('Failed to set editor content:', error)
+      // commands可能是一个getter，内部可能抛出异常
+      commands = editor.commands
+    } catch {
+      // 编辑器初始化过程中状态可能不稳定，静默忽略
+      return
+    }
+    
+    if (!commands) return
+    
+    try {
+      commands.setContent(noteContent || '')
+    } catch {
+      // 内容设置失败，静默忽略
     }
   }, [noteContent, editor])
 
@@ -641,8 +657,8 @@ export default function DocumentDetail() {
         )}
       </main>
 
-      {/* 第三列：我的笔记 */}
-      <aside className="w-96 bg-gray-50 border-l border-gray-200 flex flex-col">
+      {/* 第三列：AI问答和笔记 */}
+      <aside className="w-[500px] bg-gray-50 border-l border-gray-200 flex flex-col">
         {/* 返回按钮 */}
         <div className="px-4 py-3 border-b border-gray-200">
           <Button
@@ -654,6 +670,12 @@ export default function DocumentDetail() {
             返回文档列表
           </Button>
         </div>
+        
+        {/* AI智能问答 - 放在顶部，一屏可见 */}
+        <div className="border-b border-gray-200 bg-white">
+          <AIChat documentId={id} />
+        </div>
+        
         {/* 笔记头部 */}
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2 text-gray-700 font-semibold">
@@ -681,12 +703,12 @@ export default function DocumentDetail() {
 
         {/* 笔记编辑器工具栏（语雀风格） */}
         <div className="px-4 py-2 border-b border-gray-200 flex flex-wrap gap-1">
-          {/* 撤销/重做 */}
+         {/* 撤销/重做 */}
           <Button
             variant="outline"
             size="icon"
             onClick={() => editor?.chain().focus().undo().run()}
-            disabled={!editor || !editor.can().undo()}
+            disabled={!editor || (() => { try { return !editor.can().undo(); } catch { return true; } })()}
             className="h-7 w-7"
             title="撤销"
           >
@@ -696,7 +718,7 @@ export default function DocumentDetail() {
             variant="outline"
             size="icon"
             onClick={() => editor?.chain().focus().redo().run()}
-            disabled={!editor || !editor.can().redo()}
+            disabled={!editor || (() => { try { return !editor.can().redo(); } catch { return true; } })()}
             className="h-7 w-7"
             title="重做"
           >
@@ -706,7 +728,7 @@ export default function DocumentDetail() {
           
           {/* 字体选择 */}
           <select
-            onChange={(e) => editor?.chain().focus().setStyle({ fontFamily: e.target.value || null }).run()}
+            onChange={(e) => editor?.chain().focus().setFontFamily(e.target.value || null).run()}
             disabled={!editor}
             className="h-7 px-2 text-xs border border-gray-200 rounded bg-white disabled:opacity-50 cursor-pointer"
           >
@@ -720,7 +742,7 @@ export default function DocumentDetail() {
           </select>
           {/* 字号选择 */}
           <select
-            onChange={(e) => editor?.chain().focus().setStyle({ fontSize: e.target.value || null }).run()}
+            onChange={(e) => editor?.chain().focus().setFontSize(e.target.value || null).run()}
             disabled={!editor}
             className="h-7 px-2 text-xs border border-gray-200 rounded bg-white disabled:opacity-50 cursor-pointer"
           >
