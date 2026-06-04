@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { Document } from './document.entity';
 import { FileAttachment } from './file-attachment.entity';
 import { Category } from '../category/category.entity';
+import { Note } from '../note/note.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as mammoth from 'mammoth';
@@ -18,6 +19,8 @@ export class DocumentService {
     private fileAttachmentRepository: Repository<FileAttachment>,
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
+    @InjectRepository(Note)
+    private noteRepository: Repository<Note>,
   ) {}
 
   async findAll(categoryId?: number, tagIds?: string): Promise<Document[]> {
@@ -197,7 +200,11 @@ export class DocumentService {
 
   async remove(id: number): Promise<void> {
     const document = await this.findOne(id);
-    // 先删除所有附件记录和文件
+    
+    // 先删除相关笔记（外键约束）
+    await this.noteRepository.delete({ document: { id } });
+    
+    // 再删除所有附件记录和文件
     if (document.attachments && Array.isArray(document.attachments)) {
       for (const attachment of document.attachments) {
         try {

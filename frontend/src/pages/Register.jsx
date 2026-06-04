@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, User, Mail, Lock, UserPlus, AlertCircle, CheckCircle2, Shield, Eye, EyeOff } from 'lucide-react'
+import { useConfig } from '../context/ConfigContext'
+import { BookOpen, User, Mail, Lock, UserPlus, AlertCircle, CheckCircle2, Shield, Eye, EyeOff, Copyright } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -18,6 +19,7 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { register } = useAuth()
+  const { config } = useConfig()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -265,6 +267,14 @@ export default function Register() {
                 立即登录
               </button>
             </p>
+          </div>
+        </div>
+        
+        {/* 版权信息 */}
+        <div className="mt-8 text-center">
+          <div className="flex items-center justify-center gap-2 text-cyan-200/50 text-sm">
+            <Copyright className="w-4 h-4" />
+            <span>{config.copyright || '2024 知识库管理系统 版权所有'}</span>
           </div>
         </div>
       </div>

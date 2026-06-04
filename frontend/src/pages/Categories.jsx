@@ -17,6 +17,9 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
+import { useTheme } from '../context/ThemeContext'
+import { cn } from '../lib/utils'
+import { cardClass, textClass, inputClass } from '../lib/themeStyles'
 import {
   DndContext,
   DragOverlay,
@@ -35,7 +38,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-function RootDropzone({ onDrop }) {
+function RootDropzone({ onDrop, isDark }) {
   const { setNodeRef, isOver } = useDroppable({
     id: 'root-dropzone',
   })
@@ -43,22 +46,25 @@ function RootDropzone({ onDrop }) {
   return (
     <div
       ref={setNodeRef}
-      className={`border-2 border-dashed rounded-xl p-4 mb-4 transition-colors min-h-[60px] flex items-center justify-center ${
-        isOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-      }`}
+      className={cn(
+        "border-2 border-dashed rounded-xl p-4 mb-4 transition-colors min-h-[60px] flex items-center justify-center",
+        isOver 
+          ? (isDark ? 'border-blue-500 bg-blue-500/10' : 'border-blue-500 bg-blue-50') 
+          : (isDark ? 'border-slate-600/50' : 'border-gray-300')
+      )}
       onDrop={(e) => {
         e.preventDefault()
         onDrop()
       }}
     >
-      <p className="text-gray-500 text-center">
+      <p className={cn("text-center", isDark ? "text-slate-400" : "text-gray-500")}>
         拖拽分类到此处设为顶级分类
       </p>
     </div>
   )
 }
 
-function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, onEdit, onSave, onDelete, editCategory }) {
+function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, onEdit, onSave, onDelete, editCategory, isDark }) {
   const {
     attributes,
     listeners,
@@ -82,29 +88,41 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
     >
       <Card
         id={`category-${item.id}`}
-        className={`mb-2 transition-all cursor-grab active:cursor-grabbing ${
-          isDragging ? 'shadow-xl ring-2 ring-blue-400' : 'hover:shadow-md border-2 hover:border-blue-300'
-        }`}
+        className={cn(
+          "mb-2 transition-all cursor-grab active:cursor-grabbing",
+          cardClass(isDark),
+          isDragging 
+            ? 'shadow-xl ring-2 ring-blue-400' 
+            : isDark 
+              ? 'hover:shadow-md border-2 hover:border-blue-500/50' 
+              : 'hover:shadow-md border-2 hover:border-blue-300'
+        )}
       >
         <CardContent className="p-3">
           <div className="flex items-center gap-2">
             <button
               {...attributes}
               {...listeners}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded transition-opacity"
+              className={cn(
+                "opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity",
+                isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100"
+              )}
             >
-              <GripVertical className="w-4 h-4 text-gray-400" />
+              <GripVertical className={cn("w-4 h-4", isDark ? "text-slate-400" : "text-gray-400")} />
             </button>
             
             {item.children && item.children.length > 0 && (
               <button
                 onClick={() => onToggle(item.id)}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className={cn(
+                  "p-1 rounded transition-colors",
+                  isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100"
+                )}
               >
                 {isExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                  <ChevronDown className={cn("w-4 h-4", isDark ? "text-slate-400" : "text-gray-500")} />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                  <ChevronRight className={cn("w-4 h-4", isDark ? "text-slate-400" : "text-gray-500")} />
                 )}
               </button>
             )}
@@ -116,15 +134,16 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
               style={{ marginLeft: `${level * 16}px` }}
               className="flex items-center gap-3 flex-1"
             >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+              <div className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center",
                 level === 0
                   ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                  : 'bg-gray-100'
-              }`}>
+                  : isDark ? 'bg-slate-700/50' : 'bg-gray-100'
+              )}>
                 {(level === 0 && item.children && item.children.length > 0) ? (
                   <FolderOpen className="w-5 h-5 text-white" />
                 ) : (
-                  <Folder className={`w-5 h-5 ${level === 0 ? 'text-white' : 'text-gray-600'}`} />
+                  <Folder className={cn("w-5 h-5", level === 0 ? 'text-white' : isDark ? 'text-slate-400' : 'text-gray-600')} />
                 )}
               </div>
               {editCategory?.id === item.id ? (
@@ -133,14 +152,17 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
                   value={editCategory.name}
                   onChange={(e) => onEdit({ ...editCategory, name: e.target.value })}
                   onBlur={() => onSave(item.id)}
-                  className="flex-1 max-w-md"
+                  className={cn("flex-1 max-w-md", inputClass(isDark))}
                   autoFocus
                 />
               ) : (
-                <span className="font-semibold text-gray-800 flex-1">{item.name}</span>
+                <span className={cn("font-semibold flex-1", textClass('primary', isDark))}>{item.name}</span>
               )}
               {item.children && item.children.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge className={cn(
+                  "text-xs",
+                  isDark ? "bg-slate-700/50 text-slate-300" : "bg-gray-100 text-gray-600"
+                )}>
                   {item.children.length} 个子分类
                 </Badge>
               )}
@@ -183,7 +205,7 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
   )
 }
 
-function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory }) {
+function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory, isDark }) {
   const renderTree = useCallback((items, level = 0) => {
     // 按照 order 字段排序
     const sortedItems = [...items].sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -200,6 +222,7 @@ function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, o
           onSave={onSave}
           onDelete={onDelete}
           editCategory={editCategory}
+          isDark={isDark}
         />
         {item.children && item.children.length > 0 && expandedIds.includes(item.id) && (
           <div className="ml-4">
@@ -214,6 +237,41 @@ function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, o
 }
 
 export default function Categories() {
+  const { isDark, currentTheme } = useTheme()
+  const isPolice = currentTheme === 'police'
+  const isNight = currentTheme === 'night'
+  const isCyber = currentTheme === 'cyber'
+  const isPurple = currentTheme === 'purple'
+  const isGreen = currentTheme === 'green'
+  const isOrange = currentTheme === 'orange'
+  const isPink = currentTheme === 'pink'
+  const isSpecialTheme = isPolice || isNight || isCyber || isPurple || isGreen || isOrange || isPink
+
+  // 获取主题特定的主色调用于渐变和装饰
+  const getGradientColors = () => {
+    if (isPolice) return { from: 'from-[#0a1628]', via: 'via-[#0f1f3d]', to: 'to-[#0a1628]', accent: 'cyan', glow: '0,255,255' }
+    if (isNight) return { from: 'from-[#0f0a1e]', via: 'via-[#1a1333]', to: 'to-[#251d47]', accent: 'violet', glow: '167,139,250' }
+    if (isCyber) return { from: 'from-[#09090b]', via: 'via-[#18181b]', to: 'to-[#27272a]', accent: 'red', glow: '239,68,68' }
+    if (isPurple) return { from: 'from-[#0f172a]', via: 'via-[#1e1b4b]', to: 'to-[#1e1b4b]', accent: 'purple', glow: '168,85,247' }
+    if (isGreen) return { from: 'from-[#0f172a]', via: 'via-[#14532d]', to: 'to-[#14532d]', accent: 'green', glow: '34,197,94' }
+    if (isOrange) return { from: 'from-[#0f172a]', via: 'via-[#7c2d12]', to: 'to-[#7c2d12]', accent: 'orange', glow: '249,115,22' }
+    if (isPink) return { from: 'from-[#0f172a]', via: 'via-[#831843]', to: 'to-[#831843]', accent: 'pink', glow: '236,72,153' }
+    return { from: 'from-slate-900', via: 'via-slate-800/50', to: 'to-indigo-950/50', accent: 'blue', glow: '59,130,246' }
+  }
+  const gradientColors = getGradientColors()
+
+  // 获取主题特定的卡片样式
+  const getCardColors = () => {
+    if (isPolice) return { bgFrom: 'from-[#1a2f50]/95', bgTo: 'to-[#0f1f3d]/90', border: 'border-cyan-500/30', shadow: 'shadow-cyan-500/20', text: 'text-cyan-300', btnFrom: 'from-cyan-600', btnVia: 'via-blue-600', btnTo: 'to-cyan-500' }
+    if (isNight) return { bgFrom: 'from-[#1a1333]/95', bgTo: 'to-[#251d47]/90', border: 'border-violet-500/30', shadow: 'shadow-violet-500/20', text: 'text-violet-300', btnFrom: 'from-violet-600', btnVia: 'via-purple-600', btnTo: 'to-violet-500' }
+    if (isCyber) return { bgFrom: 'from-[#18181b]/95', bgTo: 'to-[#27272a]/90', border: 'border-red-500/30', shadow: 'shadow-red-500/20', text: 'text-red-300', btnFrom: 'from-red-600', btnVia: 'via-rose-600', btnTo: 'to-red-500' }
+    if (isPurple) return { bgFrom: 'from-[#1e1b4b]/95', bgTo: 'to-[#0f172a]/90', border: 'border-purple-500/30', shadow: 'shadow-purple-500/20', text: 'text-purple-300', btnFrom: 'from-purple-600', btnVia: 'via-violet-600', btnTo: 'to-purple-500' }
+    if (isGreen) return { bgFrom: 'from-[#14532d]/95', bgTo: 'to-[#0f172a]/90', border: 'border-green-500/30', shadow: 'shadow-green-500/20', text: 'text-green-300', btnFrom: 'from-green-600', btnVia: 'via-emerald-600', btnTo: 'to-green-500' }
+    if (isOrange) return { bgFrom: 'from-[#7c2d12]/95', bgTo: 'to-[#0f172a]/90', border: 'border-orange-500/30', shadow: 'shadow-orange-500/20', text: 'text-orange-300', btnFrom: 'from-orange-600', btnVia: 'via-amber-600', btnTo: 'to-orange-500' }
+    if (isPink) return { bgFrom: 'from-[#831843]/95', bgTo: 'to-[#0f172a]/90', border: 'border-pink-500/30', shadow: 'shadow-pink-500/20', text: 'text-pink-300', btnFrom: 'from-pink-600', btnVia: 'via-rose-600', btnTo: 'to-pink-500' }
+    return { bgFrom: 'from-slate-800/95', bgTo: 'to-slate-700/90', border: 'border-slate-600/40', shadow: 'shadow-black/40', text: 'text-slate-300', btnFrom: 'from-blue-600', btnVia: 'via-indigo-600', btnTo: 'to-purple-600' }
+  }
+  const cardColors = getCardColors()
   const [categories, setCategories] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [editCategory, setEditCategory] = useState(null)
@@ -547,20 +605,28 @@ export default function Categories() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={cn("p-6 space-y-6 min-h-screen", 
+      isDark 
+        ? isSpecialTheme
+          ? cn("bg-gradient-to-br", gradientColors.from, gradientColors.via, gradientColors.to)
+          : "bg-gradient-to-br from-slate-900 via-slate-800/50 to-slate-900"
+        : "bg-gradient-to-br from-white via-gray-50 to-blue-50")}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+          <h1 className={cn("text-3xl font-bold bg-clip-text text-transparent",
+            isDark && isSpecialTheme 
+              ? cn("bg-gradient-to-r", `from-${gradientColors.accent}-400`, `via-${gradientColors.accent}-300`, `to-${gradientColors.accent}-400`)
+              : "bg-gradient-to-r from-blue-600 to-indigo-600")}>
             分类管理
           </h1>
-          <p className="text-gray-500 mt-1">管理文档分类结构，支持拖拽排序和更改父级</p>
+          <p className={cn("mt-1", textClass('muted', isDark))}>管理文档分类结构，支持拖拽排序和更改父级</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={expandAll}
-            className="shadow"
+            className={cn("shadow", isDark && isSpecialTheme ? cn(cardColors.border, `hover:bg-${gradientColors.accent}-500/10`, `text-${gradientColors.accent}-400`) : "border-slate-600/50 hover:bg-slate-700/30 text-gray-200")}
           >
             <ChevronDown className="w-4 h-4 mr-2" />
             展开所有
@@ -569,33 +635,36 @@ export default function Categories() {
             variant="outline"
             size="sm"
             onClick={collapseAll}
-            className="shadow"
+            className={cn("shadow", isDark && isSpecialTheme ? cn(cardColors.border, `hover:bg-${gradientColors.accent}-500/10`, `text-${gradientColors.accent}-400`) : "border-slate-600/50 hover:bg-slate-700/30 text-gray-200")}
           >
             <ChevronRight className="w-4 h-4 mr-2" />
             收缩所有
           </Button>
-          <Button onClick={() => setShowAddModal(true)} className="shadow-lg bg-green-600 hover:bg-green-700">
+          <Button onClick={() => setShowAddModal(true)} className={cn("shadow-lg",
+            isDark && isSpecialTheme
+              ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, "hover:opacity-90")
+              : "bg-green-600 hover:bg-green-700")}>
               <Plus className="w-5 h-5 mr-2" />
               添加分类
             </Button>
         </div>
       </div>
 
-      <Card className="shadow-lg">
+      <Card className={cn(cardClass(isDark), isSpecialTheme ? cardColors.shadow : "shadow-lg")}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FolderTree className="w-5 h-5" />
+          <CardTitle className={cn("flex items-center gap-2", textClass('primary', isDark))}>
+            <FolderTree className={cn("w-5 h-5", isDark ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-blue-400" : "text-blue-500")} />
             分类结构
           </CardTitle>
-          <CardDescription>
+          <CardDescription className={textClass('muted', isDark)}>
             创建和管理您的文档分类层级，拖拽分类可调整顺序或更改父级
           </CardDescription>
         </CardHeader>
         <CardContent>
           {categories.length === 0 ? (
             <div className="text-center py-12">
-              <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">暂无分类，点击上方按钮添加</p>
+              <FolderOpen className={cn("w-16 h-16 mx-auto mb-4", isDark ? "text-slate-600" : "text-gray-300")} />
+              <p className={textClass('muted', isDark)}>暂无分类，点击上方按钮添加</p>
             </div>
           ) : (
             <DndContext
@@ -606,7 +675,7 @@ export default function Categories() {
               onDragEnd={handleDragEnd}
             >
               <div className="relative">
-                <RootDropzone onDrop={() => {}} />
+                <RootDropzone onDrop={() => {}} isDark={isDark} />
                 
                 <CategoryTree
                   key={renderKey}
@@ -621,26 +690,28 @@ export default function Categories() {
                   onSave={handleEdit}
                   onDelete={handleDelete}
                   editCategory={editCategory}
+                  isDark={isDark}
                 />
               </div>
 
               <DragOverlay>
                 {activeCategory ? (
-                  <Card className="shadow-2xl ring-2 ring-blue-400">
+                  <Card className={cn(cardClass(isDark), "shadow-2xl ring-2 ring-blue-400")}>
                     <CardContent className="p-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                        <div className={cn(
+                          "w-9 h-9 rounded-lg flex items-center justify-center",
                           activeCategory.children && activeCategory.children.length > 0
                             ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                            : 'bg-gray-100'
-                        }`}>
+                            : isDark ? 'bg-slate-700/50' : 'bg-gray-100'
+                        )}>
                           {activeCategory.children && activeCategory.children.length > 0 ? (
                             <FolderOpen className="w-5 h-5 text-white" />
                           ) : (
-                            <Folder className="w-5 h-5 text-gray-600" />
+                            <Folder className={cn("w-5 h-5", isDark ? "text-slate-400" : "text-gray-600")} />
                           )}
                         </div>
-                        <span className="font-semibold text-gray-800">{activeCategory.name}</span>
+                        <span className={cn("font-semibold", textClass('primary', isDark))}>{activeCategory.name}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -653,9 +724,9 @@ export default function Categories() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md shadow-2xl">
+          <Card className={cn(cardClass(isDark), "w-full max-w-md shadow-2xl")}>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+              <CardTitle className={cn("flex items-center justify-between", textClass('primary', isDark))}>
                 <span>添加分类</span>
                 <Button
                   variant="ghost"
@@ -669,26 +740,32 @@ export default function Categories() {
                   <X className="w-5 h-5" />
                 </Button>
               </CardTitle>
-              <CardDescription>创建新的文档分类</CardDescription>
+              <CardDescription className={textClass('muted', isDark)}>创建新的文档分类</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">分类名称</Label>
+                <Label className={textClass('secondary', isDark)} htmlFor="name">分类名称</Label>
                 <Input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="输入分类名称"
+                  className={inputClass(isDark)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parent">上级分类（可选）</Label>
+                <Label className={textClass('secondary', isDark)} htmlFor="parent">上级分类（可选）</Label>
                 <select
                   id="parent"
                   value={parentId || ''}
                   onChange={(e) => setParentId(e.target.value ? +e.target.value : null)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={cn(
+                    "w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500",
+                    isDark 
+                      ? "bg-slate-700/50 border-slate-600/50 text-slate-200" 
+                      : "border-gray-300"
+                  )}
                 >
                   <option value="">无上级分类（顶级分类）</option>
                   {getAllCategories(categories).map(category => (
@@ -701,7 +778,7 @@ export default function Categories() {
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
-                  className="flex-1"
+                  className={cn("flex-1", isDark && "border-slate-600/50 hover:bg-slate-700/30")}
                   onClick={() => {
                     setShowAddModal(false)
                     setName('')

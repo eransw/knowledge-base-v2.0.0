@@ -42,6 +42,12 @@ const MODEL_PRESETS = {
     model: 'qwen-max',
     authType: 'bearer',
   },
+  'deepseek-chat': {
+    name: 'DeepSeek Chat',
+    apiUrl: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    authType: 'bearer',
+  },
 };
 
 @Injectable()
