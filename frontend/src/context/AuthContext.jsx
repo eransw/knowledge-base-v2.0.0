@@ -13,7 +13,13 @@ export function AuthProvider({ children }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       const storedUser = localStorage.getItem('user')
       if (storedUser) {
-        setUser(JSON.parse(storedUser))
+        const userData = JSON.parse(storedUser)
+        setUser(userData)
+        // 如果用户有主题设置，应用主题
+        if (userData.theme) {
+          const themeEvent = new CustomEvent('user-theme', { detail: { theme: userData.theme } })
+          window.dispatchEvent(themeEvent)
+        }
       }
     }
     setLoading(false)
@@ -21,12 +27,23 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     try {
-      const response = await axios.post('/api/auth/login', { username, password })
+      const response = await axios.post('/api/auth/login', { username, password }, {
+        headers: {
+          'Authorization': undefined
+        }
+      })
       const { access_token, user: userData } = response.data
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(userData))
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(userData)
+      
+      // 如果用户有主题设置，应用主题
+      if (userData.theme) {
+        const themeEvent = new CustomEvent('user-theme', { detail: { theme: userData.theme } })
+        window.dispatchEvent(themeEvent)
+      }
+      
       return { success: true }
     } catch (error) {
       console.error('Login failed:', error)
@@ -38,16 +55,27 @@ export function AuthProvider({ children }) {
 
   const register = async (username, email, password) => {
     try {
-      const response = await axios.post('/api/auth/register', { username, email, password })
+      const instance = axios.create()
+      delete instance.defaults.headers.common['Authorization']
+      const response = await instance.post('/api/auth/register', { username, email, password })
       const { access_token, user: userData } = response.data
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(userData))
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(userData)
-      return true
+      
+      // 如果用户有主题设置（新用户默认是police），应用主题
+      if (userData.theme) {
+        const themeEvent = new CustomEvent('user-theme', { detail: { theme: userData.theme } })
+        window.dispatchEvent(themeEvent)
+      }
+      
+      return { success: true }
     } catch (error) {
       console.error('Register failed:', error)
-      return false
+      // 返回后端的错误消息
+      const errorMessage = error.response?.data?.message || '注册失败'
+      return { success: false, message: errorMessage }
     }
   }
 

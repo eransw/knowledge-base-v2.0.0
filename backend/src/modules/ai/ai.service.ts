@@ -94,8 +94,8 @@ export class AiService {
     return this.config;
   }
 
-  async getAllSystemData() {
-    const documents = await this.documentService.findAll();
+  async getAllSystemData(userId: number) {
+    const documents = await this.documentService.findAll(userId);
     const notes = await this.noteRepository.find();
 
     let context = '';
@@ -117,8 +117,8 @@ export class AiService {
     return context;
   }
 
-  async chat(question: string, documentId?: string) {
-    const systemData = await this.getAllSystemData();
+  async chat(userId: number, question: string, documentId?: string) {
+    const systemData = await this.getAllSystemData(userId);
 
     const messages = [
       {
@@ -135,7 +135,7 @@ export class AiService {
       // 模拟模式：返回预设回复用于测试
       if (this.config.mockMode) {
         const mockAnswers = [
-          `这是一个模拟回答。您问的是："${question}"\n\n系统已成功收集到以下数据：\n- 文档数量: ${(await this.documentService.findAll()).length}\n- 笔记数量: ${(await this.noteRepository.find()).length}\n\n如果配置了真实的AI模型，这里将显示基于系统数据的智能回答。`,
+          `这是一个模拟回答。您问的是："${question}"\n\n系统已成功收集到以下数据：\n- 文档数量: ${(await this.documentService.findAll(userId)).length}\n- 笔记数量: ${(await this.noteRepository.find()).length}\n\n如果配置了真实的AI模型，这里将显示基于系统数据的智能回答。`,
           `模拟模式已启用。您的问题 "${question}" 已收到。\n\n在实际使用中，系统会：\n1. 收集所有文档和笔记数据\n2. 将数据作为上下文发送给AI模型\n3. 返回基于系统数据的精准回答\n\n请在AI配置页面关闭模拟模式并配置真实的API密钥。`,
           `测试回复：您的问题是 "${question}"\n\n系统数据已准备就绪，包含文档和笔记信息。启用真实AI模型后，将为您提供智能问答服务。`,
         ];

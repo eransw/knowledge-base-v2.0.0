@@ -13,7 +13,9 @@ import {
   User,
   ChevronDown,
   Settings,
-  Bot
+  Bot,
+  Shield,
+  Users
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from './ui/button'
@@ -33,14 +35,41 @@ export default function Layout() {
   }
 
   const navItems = [
-    { icon: BookOpen, label: '文档管理', path: '/documents' },
-    { icon: FolderOpen, label: '分类管理', path: '/categories' },
-    { icon: Tag, label: '标签管理', path: '/tags' },
-    { icon: Bot, label: 'AI模型配置', path: '/ai-config' },
-    { icon: Settings, label: '系统配置', path: '/system-config' },
+    { icon: BookOpen, label: '文档管理', path: '/documents', menuId: 'documents' },
+    { icon: FolderOpen, label: '分类管理', path: '/categories', menuId: 'categories' },
+    { icon: Tag, label: '标签管理', path: '/tags', menuId: 'tags' },
+    { icon: Bot, label: 'AI模型配置', path: '/ai-config', menuId: 'ai-config' },
+    { icon: Shield, label: '角色管理', path: '/roles', menuId: 'roles' },
+    { icon: Users, label: '用户管理', path: '/users', menuId: 'users' },
+    { icon: Settings, label: '系统配置', path: '/system-config', menuId: 'system-config' },
   ]
 
   const isActive = (path) => location.pathname === path
+
+  const filteredNavItems = () => {
+    if (!user?.role) {
+      console.warn('No user or role found, showing all menus')
+      return navItems
+    }
+    
+    let permissions = user.role.permissions
+    if (typeof permissions === 'string') {
+      try {
+        permissions = JSON.parse(permissions)
+      } catch (e) {
+        console.error('Failed to parse permissions:', e)
+        return navItems
+      }
+    }
+    
+    const userMenus = permissions?.menus
+    if (!userMenus || !Array.isArray(userMenus)) {
+      console.warn('No menus found in permissions, showing all menus')
+      return navItems
+    }
+    
+    return navItems.filter(item => userMenus.includes(item.menuId))
+  }
   const isPolice = currentTheme === 'police'
   const isNight = currentTheme === 'night'
   const isCyber = currentTheme === 'cyber'
@@ -173,7 +202,7 @@ export default function Layout() {
 
   return (
     <div className={cn(
-      "min-h-screen flex flex-col transition-all duration-500 relative overflow-hidden bg-gradient-to-br",
+      "h-screen flex flex-col transition-all duration-500 relative overflow-hidden bg-gradient-to-br",
       getGradientBg()
     )}>
       {/* 主题特殊效果 */}
@@ -181,15 +210,15 @@ export default function Layout() {
 
       <header className={cn(
         headerBg,
-        "backdrop-blur-xl border-b shadow-lg sticky top-0 z-50 transition-all duration-300",
+        "backdrop-blur-xl border-b shadow-lg fixed top-0 left-0 right-0 z-50 transition-all duration-300",
         headerBorder
       )}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
               <button
                 onClick={() => navigate('/documents')}
-                className="flex items-center gap-3 group"
+                className="flex items-center gap-3 group flex-shrink-0"
               >
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-200",
@@ -205,22 +234,24 @@ export default function Layout() {
                 </span>
               </button>
 
-              <nav className="hidden md:flex items-center gap-1">
-                {navItems.map((item) => (
-                  <button
-                    key={item.path}
-                    onClick={() => navigate(item.path)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300",
-                      isActive(item.path)
-                        ? cn(getActiveBg(), "shadow-lg")
-                        : cn(navTextColor, navBgHover, navHoverColor)
-                    )}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    <span className="font-medium">{item.label}</span>
-                  </button>
-                ))}
+              <nav className="hidden md:flex items-center gap-1 ml-4 overflow-x-auto scrollbar-hide flex-1">
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  {filteredNavItems().map((item) => (
+                    <button
+                      key={item.path}
+                      onClick={() => navigate(item.path)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300 flex-shrink-0",
+                        isActive(item.path)
+                          ? cn(getActiveBg(), "shadow-lg")
+                          : cn(navTextColor, navBgHover, navHoverColor)
+                      )}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      <span className="font-medium text-sm">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
               </nav>
             </div>
 
@@ -281,7 +312,7 @@ export default function Layout() {
             (isDark ? cn(colors.border.primary, "bg-slate-900/95") : "border-gray-200/50 bg-white")
           )}>
             <nav className="px-4 py-4 space-y-2">
-              {navItems.map((item) => (
+              {filteredNavItems().map((item) => (
                 <button
                   key={item.path}
                   onClick={() => {
@@ -335,21 +366,22 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="flex-1 overflow-auto relative z-10">
+      {/* 主内容区域 - 可滚动 */}
+      <main className="flex-1 overflow-auto relative z-10 pt-20 pb-20">
         <div className="min-h-full px-4 sm:px-6 lg:px-8 py-6">
           <Outlet />
         </div>
       </main>
 
-      {/* 底部版权信息 */}
+      {/* 底部版权信息 - 固定在底部 */}
       <footer className={cn(
-        "relative z-10 py-6 border-t",
-        isPolice ? "border-blue-500/30 bg-[#003366]/50" :
-        isNight ? "border-violet-500/30 bg-[#1a1333]/50" :
-        isCyber ? "border-red-500/30 bg-[#18181b]/50" :
-        (isDark ? "border-slate-700/30 bg-slate-900/50" : "border-gray-200/50 bg-white/50")
+        "fixed bottom-0 left-0 right-0 z-40 py-4 border-t backdrop-blur-xl",
+        isPolice ? "border-blue-500/30 bg-[#003366]/90" :
+        isNight ? "border-violet-500/30 bg-[#1a1333]/90" :
+        isCyber ? "border-red-500/30 bg-[#18181b]/90" :
+        (isDark ? "border-slate-700/30 bg-slate-900/90" : "border-gray-200/50 bg-white/90")
       )}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-center gap-2">
             <Copyright className={cn("w-4 h-4", isDark ? "text-slate-500" : "text-gray-400")} />
             <span className={cn("text-sm", isDark ? "text-slate-500" : "text-gray-500")}>

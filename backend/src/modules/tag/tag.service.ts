@@ -10,44 +10,44 @@ export class TagService {
     private tagRepository: Repository<Tag>,
   ) {}
 
-  async findAll(): Promise<Tag[]> {
-    return this.tagRepository.find({ order: { order: 'ASC' } });
+  async findAll(userId: number): Promise<Tag[]> {
+    return this.tagRepository.find({ where: { userId }, order: { order: 'ASC' } });
   }
 
-  async findOne(id: number): Promise<Tag> {
-    return this.tagRepository.findOneBy({ id });
+  async findOne(userId: number, id: number): Promise<Tag> {
+    return this.tagRepository.findOneBy({ id, userId });
   }
 
-  async findByName(name: string): Promise<Tag> {
-    return this.tagRepository.findOneBy({ name });
+  async findByName(userId: number, name: string): Promise<Tag> {
+    return this.tagRepository.findOneBy({ name, userId });
   }
 
-  async create(tag: Partial<Tag>): Promise<Tag> {
-    const newTag = this.tagRepository.create(tag);
+  async create(userId: number, tag: Partial<Tag>): Promise<Tag> {
+    const newTag = this.tagRepository.create({ ...tag, userId });
     return this.tagRepository.save(newTag);
   }
 
-  async update(id: number, tag: Partial<Tag>): Promise<Tag> {
-    await this.tagRepository.update(id, tag);
-    return this.findOne(id);
+  async update(userId: number, id: number, tag: Partial<Tag>): Promise<Tag> {
+    await this.tagRepository.update({ id, userId }, tag);
+    return this.findOne(userId, id);
   }
 
-  async remove(id: number): Promise<void> {
-    await this.tagRepository.delete(id);
+  async remove(userId: number, id: number): Promise<void> {
+    await this.tagRepository.delete({ id, userId });
   }
 
-  async updateOrder(orderData: { id: number; order: number }[]): Promise<void> {
+  async updateOrder(userId: number, orderData: { id: number; order: number }[]): Promise<void> {
     for (const item of orderData) {
-      await this.tagRepository.update(item.id, { order: item.order });
+      await this.tagRepository.update({ id: item.id, userId }, { order: item.order });
     }
   }
 
-  async getOrCreate(names: string[]): Promise<Tag[]> {
+  async getOrCreate(userId: number, names: string[]): Promise<Tag[]> {
     const tags: Tag[] = [];
     for (const name of names) {
-      let tag = await this.findByName(name);
+      let tag = await this.findByName(userId, name);
       if (!tag) {
-        tag = await this.create({ name });
+        tag = await this.create(userId, { name });
       }
       tags.push(tag);
     }

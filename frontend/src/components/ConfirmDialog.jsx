@@ -23,7 +23,7 @@ export function ConfirmDialog({ isOpen, onClose, onConfirm, title, message }) {
         <CardContent>
           <p className={cn("mb-4", isDark ? "text-slate-300" : "text-gray-600")}>{message}</p>
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={onClose}>
+            <Button variant="outline" className={cn("flex-1", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "")} onClick={onClose}>
               取消
             </Button>
             <Button variant="destructive" className="flex-1" onClick={handleConfirm}>

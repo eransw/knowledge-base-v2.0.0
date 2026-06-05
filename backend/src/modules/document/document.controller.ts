@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, Query, Put, Inject, Res, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, Query, Put, Inject, Res, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { Response, Request } from 'express';
 import * as fs from 'fs';
 import { DocumentService } from './document.service';
@@ -31,6 +32,7 @@ const storage = diskStorage({
 
 
 @Controller('documents')
+@UseGuards(AuthGuard('jwt'))
 export class DocumentController {
   constructor(
     private documentService: DocumentService,
@@ -44,28 +46,34 @@ export class DocumentController {
 
   @Get()
   findAll(
+    @Req() req: Request,
     @Query('categoryId') categoryId?: string,
     @Query('tagIds') tagIds?: string
   ) {
+    const userId = req.user['id'];
     return this.documentService.findAll(
+      userId,
       categoryId ? parseInt(categoryId) : undefined,
       tagIds || undefined
     );
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.documentService.findOne(+id);
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
+    return this.documentService.findOne(userId, +id);
   }
 
   @Get('search')
-  search(@Query('keyword') keyword: string) {
-    return this.documentService.search(keyword);
+  search(@Req() req: Request, @Query('keyword') keyword: string) {
+    const userId = req.user['id'];
+    return this.documentService.search(userId, keyword);
   }
 
   @Post('upload')
   @UseInterceptors(FilesInterceptor('files', 10, { storage }))
   async uploadFiles(@UploadedFiles() files: any[], @Body() body: any, @Req() req: Request) {
+    const userId = req.user['id'];
     const uploadDir = path.join(__dirname, '..', '..', '..', 'uploads');
     
     // 保存所有附件
@@ -117,7 +125,7 @@ export class DocumentController {
     if (body.categoryId) {
       const categoryId = parseInt(body.categoryId, 10);
       if (!isNaN(categoryId) && categoryId > 0) {
-        category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+        category = await this.categoryRepository.findOne({ where: { id: categoryId, userId } });
       }
     }
     
@@ -127,7 +135,7 @@ export class DocumentController {
       try {
         const tagIds = JSON.parse(body.tagIds);
         console.log('Received tagIds:', tagIds);
-        tags = await this.tagRepository.findBy({ id: In(tagIds) });
+        tags = await this.tagRepository.findBy({ id: In(tagIds), userId });
         console.log('Found tags:', tags);
       } catch (e) {
         console.error('Failed to parse tagIds:', e);
@@ -143,16 +151,19 @@ export class DocumentController {
       category,
       tags,
       attachments,
+      userId,
     });
   }
 
   @Post(':id')
   @UseInterceptors(FilesInterceptor('files', 10, { storage }))
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() body: any,
     @UploadedFiles() files?: any[]
   ) {
+    const userId = req.user['id'];
     try {
       const updateData: any = {};
     
@@ -167,7 +178,7 @@ export class DocumentController {
     if (body.categoryId !== undefined) {
       const categoryId = parseInt(body.categoryId, 10);
       if (!isNaN(categoryId) && categoryId > 0) {
-        updateData.category = await this.categoryRepository.findOne({ where: { id: categoryId } });
+        updateData.category = await this.categoryRepository.findOne({ where: { id: categoryId, userId } });
       } else if (body.categoryId === null || body.categoryId === '') {
         updateData.category = null;
       }
@@ -177,7 +188,7 @@ export class DocumentController {
     if (body.tagIds) {
       try {
         const tagIds = JSON.parse(body.tagIds);
-        const tags = await this.tagRepository.findBy({ id: In(tagIds) });
+        const tags = await this.tagRepository.findBy({ id: In(tagIds), userId });
         updateData.tags = tags;
       } catch (e) {
         console.error('Failed to parse tagIds:', e);
@@ -201,7 +212,7 @@ export class DocumentController {
     }
     
     // 更新文档基本信息
-    let document = await this.documentService.update(+id, updateData);
+    let document = await this.documentService.update(userId, +id, updateData);
     
     // 处理新附件上传
     if (files && files.length > 0) {
@@ -211,10 +222,10 @@ export class DocumentController {
       console.log('=== Adding new attachments ===');
       console.log('Number of files to add:', files.length);
       // 使用文档ID重新获取最新的文档对象来添加附件
-      await this.documentService.addAttachments(+id, files);
+      await this.documentService.addAttachments(userId, +id, files);
       console.log('=== Attachments added successfully ===');
       // 重新获取文档以包含新附件
-      document = await this.documentService.findOne(+id);
+      document = await this.documentService.findOne(userId, +id);
     } else {
       console.log('=== No files to add ===');
       console.log('Files variable:', files);
@@ -230,9 +241,10 @@ export class DocumentController {
     }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
+  async remove(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
     try {
-      await this.documentService.remove(+id);
+      await this.documentService.remove(userId, +id);
       return { success: true, message: '删除成功' };
     } catch (error) {
       console.error('Delete document error:', error);
@@ -241,6 +253,7 @@ export class DocumentController {
   }
 
   @Delete('attachment/:attachmentId')
+  @UseGuards(AuthGuard('jwt'))
   async removeAttachment(@Param('attachmentId') attachmentId: string) {
     try {
       const attachment = await this.fileAttachmentRepository.findOne({ where: { id: +attachmentId } });
@@ -256,6 +269,7 @@ export class DocumentController {
   }
 
   @Get('download/:attachmentId')
+  @UseGuards(AuthGuard('jwt'))
   async downloadAttachment(@Param('attachmentId') attachmentId: string, @Res() res: Response) {
     const attachment = await this.documentService.getAttachment(+attachmentId);
     if (!attachment) {
@@ -275,6 +289,7 @@ export class DocumentController {
   }
 
   @Get('preview/:attachmentId')
+  @UseGuards(AuthGuard('jwt'))
   async previewAttachment(@Param('attachmentId') attachmentId: string, @Res() res: Response) {
     const attachment = await this.documentService.getAttachment(+attachmentId);
     if (!attachment) {

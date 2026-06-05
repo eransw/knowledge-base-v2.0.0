@@ -1,43 +1,53 @@
-import { Controller, Get, Post, Body, Param, Delete, Put } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Put, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
 import { CategoryService } from './category.service';
 import { Category } from './category.entity';
 
 @Controller('categories')
+@UseGuards(AuthGuard('jwt'))
 export class CategoryController {
   constructor(private categoryService: CategoryService) {}
 
   @Get()
-  findAll() {
-    return this.categoryService.findAll();
+  findAll(@Req() req: Request) {
+    const userId = req.user['id'];
+    return this.categoryService.findAll(userId);
   }
 
   @Get('tree')
-  getTree() {
-    return this.categoryService.getTree();
+  getTree(@Req() req: Request) {
+    const userId = req.user['id'];
+    return this.categoryService.getTree(userId);
   }
 
   @Get('doc-count')
-  getDocumentCount() {
-    return this.categoryService.getDocumentCount();
+  getDocumentCount(@Req() req: Request) {
+    const userId = req.user['id'];
+    return this.categoryService.getDocumentCount(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.categoryService.findOne(+id);
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
+    return this.categoryService.findOne(userId, +id);
   }
 
   @Post()
-  create(@Body() category: Partial<Category>) {
-    return this.categoryService.create(category);
+  create(@Req() req: Request, @Body() category: Partial<Category>) {
+    const userId = req.user['id'];
+    return this.categoryService.create(userId, category);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() category: Partial<Category>) {
-    return this.categoryService.update(+id, category);
+  update(@Req() req: Request, @Param('id') id: string, @Body() category: Partial<Category>) {
+    const userId = req.user['id'];
+    return this.categoryService.update(userId, +id, category);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.categoryService.remove(+id);
+  remove(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
+    return this.categoryService.remove(userId, +id);
   }
 }

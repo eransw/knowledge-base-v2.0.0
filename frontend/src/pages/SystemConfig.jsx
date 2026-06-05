@@ -103,10 +103,12 @@ export default function SystemConfig() {
         : "bg-gradient-to-br from-white via-gray-50 to-blue-50")}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={cn("text-3xl font-bold bg-clip-text text-transparent",
+          <h1 className={cn("text-3xl font-bold",
             isDark && isSpecialTheme 
-              ? cn("bg-gradient-to-r", `from-${gradientColors.accent}-400`, `via-${gradientColors.accent}-300`, `to-${gradientColors.accent}-400`)
-              : "bg-gradient-to-r from-blue-600 to-indigo-600")}>
+              ? cn(`text-${gradientColors.accent}-300`, `drop-shadow-[0_0_10px_rgba(${gradientColors.glow},0.5)]`)
+              : isDark 
+                ? "text-white"
+                : "bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent")}>
             系统配置
           </h1>
           <p className={cn("mt-1", textClass('muted', isDark, currentTheme))}>管理系统的各项配置</p>

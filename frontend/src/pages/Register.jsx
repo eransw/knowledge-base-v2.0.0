@@ -39,14 +39,14 @@ export default function Register() {
       return
     }
 
-    const success = await register(username, email, password)
-    if (success) {
+    const result = await register(username, email, password)
+    if (result.success) {
       setSuccess(true)
       setTimeout(() => {
         navigate('/documents')
       }, 1500)
     } else {
-      setError('注册失败，请重试')
+      setError(result.message || '注册失败，请重试')
     }
     setIsLoading(false)
   }

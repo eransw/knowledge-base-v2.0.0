@@ -1,14 +1,18 @@
-import { Controller, Post, Body, Get, Put } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Req, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
 import { AiService } from './ai.service';
 
 @Controller('ai')
+@UseGuards(AuthGuard('jwt'))
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post('chat')
-  async chat(@Body() body: { question: string; documentId?: string }) {
+  async chat(@Req() req: Request, @Body() body: { question: string; documentId?: string }) {
+    const userId = req.user['id'];
     const { question, documentId } = body;
-    return await this.aiService.chat(question, documentId);
+    return await this.aiService.chat(userId, question, documentId);
   }
 
   @Get('config')

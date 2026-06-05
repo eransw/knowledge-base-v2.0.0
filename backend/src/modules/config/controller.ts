@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
 import { ConfigService } from './config.service';
 
 @Controller('config')
@@ -6,13 +8,17 @@ export class ConfigController {
   constructor(private configService: ConfigService) {}
 
   @Get()
-  async getAll() {
-    return this.configService.getAll();
+  @UseGuards(AuthGuard('jwt'))
+  async getAll(@Req() req: Request) {
+    const userId = req.user['id'];
+    return this.configService.getAll(userId);
   }
 
   @Post()
-  async set(@Body() body: { key: string; value: string }) {
-    await this.configService.set(body.key, body.value);
+  @UseGuards(AuthGuard('jwt'))
+  async set(@Req() req: Request, @Body() body: { key: string; value: string }) {
+    const userId = req.user['id'];
+    await this.configService.set(body.key, body.value, userId);
     return { success: true };
   }
 }

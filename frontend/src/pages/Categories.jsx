@@ -613,10 +613,12 @@ export default function Categories() {
         : "bg-gradient-to-br from-white via-gray-50 to-blue-50")}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={cn("text-3xl font-bold bg-clip-text text-transparent",
+          <h1 className={cn("text-3xl font-bold",
             isDark && isSpecialTheme 
-              ? cn("bg-gradient-to-r", `from-${gradientColors.accent}-400`, `via-${gradientColors.accent}-300`, `to-${gradientColors.accent}-400`)
-              : "bg-gradient-to-r from-blue-600 to-indigo-600")}>
+              ? cn(`text-${gradientColors.accent}-300`, `drop-shadow-[0_0_10px_rgba(${gradientColors.glow},0.5)]`)
+              : isDark 
+                ? "text-white"
+                : "bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent")}>
             分类管理
           </h1>
           <p className={cn("mt-1", textClass('muted', isDark))}>管理文档分类结构，支持拖拽排序和更改父级</p>
@@ -778,7 +780,7 @@ export default function Categories() {
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
-                  className={cn("flex-1", isDark && "border-slate-600/50 hover:bg-slate-700/30")}
+                  className={cn("flex-1", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "")}
                   onClick={() => {
                     setShowAddModal(false)
                     setName('')

@@ -39,7 +39,7 @@ export function Dialog({ open, onClose, title, children, confirmText = '确定',
           "flex items-center justify-end gap-3 px-6 py-4 border-t",
           isDark ? "border-slate-700/50" : "border-gray-100"
         )}>
-          <Button variant="outline" onClick={onClose} className={isDark ? "border-slate-600/50 text-slate-300 hover:bg-slate-700/50" : ""}>
+          <Button variant="outline" onClick={onClose} className={isDark ? "border-slate-600/50 text-white hover:bg-slate-700/50" : ""}>
             {cancelText}
           </Button>
           <Button 

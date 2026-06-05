@@ -10,30 +10,32 @@ export class CategoryService {
     private categoryRepository: Repository<Category>,
   ) {}
 
-  async findAll(): Promise<Category[]> {
+  async findAll(userId: number): Promise<Category[]> {
     const categories = await this.categoryRepository.find({
+      where: { userId },
       relations: { children: true, documents: true, parent: true },
     });
     return categories.sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 
-  async findOne(id: number): Promise<Category> {
+  async findOne(userId: number, id: number): Promise<Category> {
     return this.categoryRepository.findOne({
-      where: { id },
+      where: { id, userId },
       relations: { children: true, documents: true },
     });
   }
 
-  async create(category: Partial<Category> & { parentId?: number }): Promise<Category> {
+  async create(userId: number, category: Partial<Category> & { parentId?: number }): Promise<Category> {
     const { parentId, ...rest } = category;
     const newCategory = this.categoryRepository.create({
       ...rest,
+      userId,
       parent: parentId ? { id: parentId } as Category : null,
     });
     return this.categoryRepository.save(newCategory);
   }
 
-  async update(id: number, category: Partial<Category> & { parentId?: number }): Promise<Category> {
+  async update(userId: number, id: number, category: Partial<Category> & { parentId?: number }): Promise<Category> {
     const { parentId, order, ...rest } = category;
     const updateData: any = { ...rest };
     
@@ -46,16 +48,16 @@ export class CategoryService {
       updateData.parent = parentId ? { id: parentId } as Category : null;
     }
     
-    await this.categoryRepository.update(id, updateData);
-    return this.findOne(id);
+    await this.categoryRepository.update({ id, userId }, updateData);
+    return this.findOne(userId, id);
   }
 
-  async remove(id: number): Promise<void> {
-    await this.categoryRepository.delete(id);
+  async remove(userId: number, id: number): Promise<void> {
+    await this.categoryRepository.delete({ id, userId });
   }
 
-  async getTree(): Promise<Category[]> {
-    const categories = await this.findAll();
+  async getTree(userId: number): Promise<Category[]> {
+    const categories = await this.findAll(userId);
     const rootCategories = categories.filter((c) => !c.parent);
     return rootCategories.map((root) => this.buildTree(root, categories));
   }
@@ -70,8 +72,8 @@ export class CategoryService {
     };
   }
 
-  async getDocumentCount(): Promise<{ categoryId: number; count: number }[]> {
-    const categories = await this.findAll();
+  async getDocumentCount(userId: number): Promise<{ categoryId: number; count: number }[]> {
+    const categories = await this.findAll(userId);
     const result = categories.map(cat => ({
       categoryId: cat.id,
       count: cat.documents?.length || 0

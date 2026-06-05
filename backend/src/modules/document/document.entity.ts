@@ -2,6 +2,7 @@ import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, ManyToMany, JoinTabl
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
 import { FileAttachment } from './file-attachment.entity';
+import { User } from '../auth/user.entity';
 
 @Entity()
 export class Document {
@@ -23,6 +24,12 @@ export class Document {
   @ManyToMany(() => Tag)
   @JoinTable()
   tags: Tag[];
+
+  @ManyToOne(() => User, (user) => user.documents)
+  user: User;
+
+  @Column()
+  userId: number;
 
   @OneToMany(() => FileAttachment, (attachment) => attachment.document, { cascade: true })
   attachments: FileAttachment[];

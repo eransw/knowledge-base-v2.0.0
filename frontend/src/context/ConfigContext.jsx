@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
+import { useAuth } from './AuthContext'
 
 const ConfigContext = createContext()
 
@@ -8,11 +9,15 @@ export function ConfigProvider({ children }) {
     siteName: '知识库',
     loginTitle: '欢迎登录',
     loginSubtitle: '管理您的文档和知识',
+    copyright: '2024 知识库管理系统 版权所有',
   })
+  const { user } = useAuth()
 
   useEffect(() => {
-    fetchConfig()
-  }, [])
+    if (user) {
+      fetchConfig()
+    }
+  }, [user])
 
   async function fetchConfig() {
     try {

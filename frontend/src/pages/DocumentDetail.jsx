@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useMediaUrl } from '../hooks/useMediaUrl'
 import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle, Code, TableIcon, Minus, Quote, ListTodo, Highlighter, Strikethrough, Undo, Redo, Link2, Type, Palette, ListChecks, Grid3X3, Info } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -8,6 +9,7 @@ import { Badge } from '../components/ui/badge'
 import { Dialog } from '../components/ui/Dialog'
 import { useEditor, EditorContent } from '@tiptap/react'
 import AIChat from '../components/AIChat'
+import AttachmentPreview from '../components/AttachmentPreview'
 import StarterKit from '@tiptap/starter-kit'
 import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
@@ -327,7 +329,7 @@ export default function DocumentDetail() {
                 isDark ? "text-gray-500" : "text-gray-400"
               )} />
               <span className={cn(
-                "flex-1",
+                "flex-1 text-sm whitespace-nowrap overflow-hidden text-ellipsis",
                 isDark ? "text-gray-300" : "text-gray-700"
               )}>{cat.name}</span>
             </div>
@@ -353,8 +355,39 @@ export default function DocumentDetail() {
   }
 
   // 处理下载
-  const handleDownload = (attachmentId) => {
-    window.open(`/api/documents/download/${attachmentId}`, '_blank')
+  const handleDownload = async (attachmentId) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/documents/download/${attachmentId}`, {
+        responseType: 'blob',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      // 获取文件名
+      const contentDisposition = response.headers['content-disposition']
+      let filename = 'download'
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (match && match[1]) {
+          filename = decodeURIComponent(match[1].replace(/['"]/g, ''))
+        }
+      }
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('下载失败:', error)
+      alert('下载失败')
+    }
   }
 
   // 打开删除确认对话框
@@ -372,7 +405,12 @@ export default function DocumentDetail() {
   // 处理删除附件
   const handleDeleteAttachment = () => {
     if (attachmentToDelete) {
-      axios.delete(`/api/documents/attachment/${attachmentToDelete}`).then(() => {
+      const token = localStorage.getItem('token')
+      axios.delete(`/api/documents/attachment/${attachmentToDelete}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }).then(() => {
         // 刷新文档详情
         axios.get(`/api/documents/${id}`).then(res => {
           setDocument(res.data)
@@ -387,12 +425,49 @@ export default function DocumentDetail() {
   }
 
   // 处理下载全部
-  const handleDownloadAll = () => {
-    document?.attachments?.forEach((attachment, index) => {
-      setTimeout(() => {
-        window.open(`/api/documents/download/${attachment.id}`, '_blank')
-      }, index * 500)
-    })
+  const handleDownloadAll = async () => {
+    if (!document?.attachments?.length) return
+    
+    const token = localStorage.getItem('token')
+    
+    for (let index = 0; index < document.attachments.length; index++) {
+      const attachment = document.attachments[index]
+      try {
+        const response = await axios.get(`/api/documents/download/${attachment.id}`, {
+          responseType: 'blob',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        // 获取文件名
+        const contentDisposition = response.headers['content-disposition']
+        let filename = 'download'
+        if (contentDisposition) {
+          const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+          if (match && match[1]) {
+            filename = decodeURIComponent(match[1].replace(/['"]/g, ''))
+          }
+        }
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', filename)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        // 延迟下载下一个文件
+        if (index < document.attachments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      } catch (error) {
+        console.error(`下载文件 ${attachment.id} 失败:`, error)
+      }
+    }
   }
 
   // 处理分享
@@ -440,7 +515,7 @@ export default function DocumentDetail() {
     )}>
       {/* 左侧边栏 - 两列布局 */}
       <div className="flex flex-shrink-0">
-        {/* 第一列：分类和标签管理 */}
+        {/*// 第一列：分类和标签管理 */}
         <aside className={cn(
           "w-72 backdrop-blur-xl border-r transition-colors",
           isDark 
@@ -579,8 +654,8 @@ export default function DocumentDetail() {
 
        {/* 第二列：可收缩/展开面板 */}
         <aside className={cn(
-          "pr-6 transition-all duration-300 relative backdrop-blur-xl",
-          secondColumnCollapsed ? 'w-0 overflow-hidden' : 'w-56',
+          "transition-all duration-300 relative backdrop-blur-xl",
+          secondColumnCollapsed ? 'w-0 overflow-hidden' : 'w-52',
           isDark 
             ? isSpecialTheme 
               ? cn("bg-gradient-to-b", cardColors.bgTo, "via-[#1a2f50]/90", cardColors.bgTo)
@@ -589,32 +664,18 @@ export default function DocumentDetail() {
         )}>
           {!secondColumnCollapsed && (
             <>
-              {/* 收缩按钮（显示在第二列右侧） */}
-              <button
-                onClick={() => setSecondColumnCollapsed(!secondColumnCollapsed)}
-                className={cn(
-                  "w-6 h-14 flex items-center justify-center cursor-pointer transition-all duration-300 absolute right-0 top-6 rounded-tl-xl rounded-bl-xl shadow-lg",
-                  isDark 
-                    ? "bg-slate-800/80 hover:bg-slate-700/80 backdrop-blur-sm" 
-                    : "bg-white/90 hover:bg-gray-100 backdrop-blur-sm border border-gray-200/50"
-                )}
-                title="收起第二列"
-              >
-                <ChevronLeft className={cn(
-                  "w-4 h-4 transition-transform duration-200 hover:-translate-x-0.5",
-                  isDark ? "text-gray-400" : "text-gray-500"
-                )} />
-              </button>
-
               {/* 文档列表 */}
-              <div className={cn(
-                "rounded-2xl border overflow-hidden transition-all duration-300",
-                isDark 
-                  ? isSpecialTheme
-                    ? cn("bg-gradient-to-b", cardColors.bgFrom, "to-[#0f1f3d]/50", cardColors.border, `shadow-xl shadow-${gradientColors.accent}-500/5`)
-                    : "bg-gradient-to-b from-slate-800/60 to-slate-800/30 border-slate-700/30 shadow-xl shadow-black/10"
-                  : "bg-white/90 border-gray-200/50 shadow-lg"
-              )}>
+              <div 
+                className={cn(
+                  "rounded-2xl border overflow-hidden transition-all duration-300",
+                  isDark 
+                    ? isSpecialTheme
+                      ? cn("bg-gradient-to-b", cardColors.bgFrom, "to-[#0f1f3d]/50", cardColors.border, `shadow-xl shadow-${gradientColors.accent}-500/5`)
+                      : "bg-gradient-to-b from-slate-800/60 to-slate-800/30 border-slate-700/30 shadow-xl shadow-black/10"
+                    : "bg-white/90 border-gray-200/50 shadow-lg"
+                )}
+                style={{ marginTop: '16px' }}
+              >
                 <div 
                   className={cn(
                     "flex items-center gap-3 font-medium px-4 py-3.5 cursor-pointer transition-all duration-200",
@@ -671,14 +732,14 @@ export default function DocumentDetail() {
                               isDark ? "bg-gradient-to-b from-blue-500 to-purple-500" : "bg-blue-500"
                             )} />
                           )}
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-start gap-3">
                             <FileText className={cn(
-                              "w-4 h-4 transition-colors duration-200",
+                              "w-4 h-4 transition-colors duration-200 mt-0.5",
                               document?.id === doc.id 
                                 ? isDark ? 'text-blue-400' : 'text-blue-500'
                                 : isDark ? 'text-gray-500 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500'
                             )} />
-                            <span className={cn("text-sm truncate", isDark ? "text-gray-300" : "text-gray-700")}>
+                            <span className={cn("text-sm leading-tight", isDark ? "text-gray-300" : "text-gray-700")} style={{ wordBreak: 'break-all', maxWidth: '140px' }}>
                               {doc.title}
                             </span>
                           </div>
@@ -785,6 +846,27 @@ export default function DocumentDetail() {
           )}
         </aside>
       </div>
+
+      {/* 第二列收缩按钮（展开状态时显示）*/}
+      <button
+        onClick={() => setSecondColumnCollapsed(!secondColumnCollapsed)}
+        className={`w-6 h-14 flex items-center justify-center cursor-pointer transition-all duration-300 flex-shrink-0 mt-[25px] ${
+          !secondColumnCollapsed 
+            ? cn(
+                "rounded-tr-xl rounded-br-xl shadow-lg border-l-0 border-r z-50",
+                isDark 
+                  ? "bg-slate-800/80 hover:bg-slate-700/80 backdrop-blur-sm border-slate-600/30" 
+                  : "bg-white/90 hover:bg-gray-100 backdrop-blur-sm border-gray-200"
+              )
+            : 'w-0 overflow-hidden opacity-0'
+        }`}
+        title="收起第二列"
+      >
+        <ChevronLeft className={cn(
+          "w-4 h-4 transition-transform duration-200 hover:-translate-x-0.5",
+          isDark ? "text-gray-400" : "text-gray-500"
+        )} />
+      </button>
 
      {/* 主内容区 */}
       <main className={cn(
@@ -905,94 +987,20 @@ export default function DocumentDetail() {
                       <div className="flex items-center gap-2">
                         <Button size="sm" className={cn(
                           isDark ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-800"
-                        )}>
+                        )} onClick={() => handleDownload(attachment.id)}>
                           <Download className="w-4 h-4 mr-1" />
                           下载
                         </Button>
-                        <Button size="sm" variant="destructive" className="hover:bg-red-600/80">
+                        <Button size="sm" variant="destructive" className="hover:bg-red-600/80" onClick={() => openDeleteDialog(attachment.id)}>
                           删除
                         </Button>
                       </div>
                     </div>
 
-                    {/* 视频预览 */}
-                    {attachment.fileType?.includes('video') && (
-                      <div className="relative w-full max-h-96 bg-slate-900 rounded-xl overflow-hidden">
-                        <video
-                          controls
-                          className="w-full h-full"
-                          src={`/api/documents/download/${attachment.id}`}
-                          poster=""
-                          onPlay={(e) => {
-                            e.target.parentElement.querySelector('.video-overlay')?.classList.add('opacity-0')
-                            setTimeout(() => {
-                              e.target.parentElement.querySelector('.video-overlay')?.classList.add('pointer-events-none')
-                            }, 300)
-                          }}
-                          onPause={(e) => {
-                            e.target.parentElement.querySelector('.video-overlay')?.classList.remove('opacity-0', 'pointer-events-none')
-                          }}
-                        >
-                          您的浏览器不支持视频播放
-                        </video>
-                        {/* 视频预览覆盖层 - 显示播放按钮 */}
-                        <div 
-                          className="video-overlay absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/50 via-black/20 to-transparent transition-all duration-300"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const video = e.currentTarget.parentElement.querySelector('video')
-                            if (video) {
-                              video.play()
-                            }
-                          }}
-                        >
-                          <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-all duration-300 border border-white/20">
-                            <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 音频预览 */}
-                    {attachment.fileType?.includes('audio') && (
-                      <div className="p-4">
-                        <audio
-                          controls
-                          className="w-full rounded-xl bg-slate-800/50"
-                          src={`/api/documents/download/${attachment.id}`}
-                        />
-                      </div>
-                    )}
-
-                    {/* 图片预览 */}
-                    {attachment.fileType?.includes('image') && (
-                      <div className="p-4">
-                        <img
-                          src={`/api/documents/download/${attachment.id}`}
-                          alt={attachment.originalFilename}
-                          className="max-w-full h-auto rounded-xl"
-                          style={{ maxHeight: '500px', objectFit: 'contain' }}
-                        />
-                      </div>
-                    )}
-
-                    {/* PDF预览 */}
-                    {attachment.fileType?.includes('pdf') && (
-                      <div className="p-4">
-                        <object
-                          data={`/api/documents/preview/${attachment.id}`}
-                          type="application/pdf"
-                          className="w-full"
-                          style={{ 
-                            height: '600px',
-                            minHeight: '500px',
-                            maxHeight: '800px',
-                            aspectRatio: '16/9'
-                          }}
-                        >
-                          <p className={cn("text-center py-8", isDark ? "text-slate-400" : "text-gray-400")}>您的浏览器不支持PDF预览，请点击下载按钮下载查看。</p>
-                        </object>
-                      </div>
+                    {/* 媒体预览 */}
+                    {(attachment.fileType?.includes('video') || attachment.fileType?.includes('audio') || 
+                      attachment.fileType?.includes('image') || attachment.fileType?.includes('pdf')) && (
+                      <AttachmentPreview attachment={attachment} isDark={isDark} />
                     )}
 
                     {/* 文档内容预览 */}
@@ -1028,7 +1036,7 @@ export default function DocumentDetail() {
 
       {/* 第三列：AI问答和笔记 */}
       <aside className={cn(
-        "w-[500px] flex flex-col backdrop-blur-lg border-l",
+        "w-[480px] flex flex-col backdrop-blur-lg border-l",
         isDark ? "bg-slate-900/70 border-slate-700/30" : "bg-white/80 border-gray-200"
       )}>
         {/* 返回按钮 */}

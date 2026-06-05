@@ -425,4 +425,4 @@ export const themes = {
   },
 }
 
-export const defaultTheme = 'light'
+export const defaultTheme = 'police'

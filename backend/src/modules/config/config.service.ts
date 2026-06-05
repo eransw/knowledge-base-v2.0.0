@@ -10,24 +10,25 @@ export class ConfigService {
     private configRepository: Repository<Config>,
   ) {}
 
-  async get(key: string): Promise<string | null> {
-    const config = await this.configRepository.findOneBy({ key });
+  async get(key: string, userId: number): Promise<string | null> {
+    const config = await this.configRepository.findOneBy({ key, userId });
     return config?.value || null;
   }
 
-  async set(key: string, value: string): Promise<void> {
-    let config = await this.configRepository.findOneBy({ key });
+  async set(key: string, value: string, userId: number): Promise<void> {
+    let config = await this.configRepository.findOneBy({ key, userId });
     if (config) {
       config.value = value;
     } else {
-      config = this.configRepository.create({ key, value });
+      config = this.configRepository.create({ key, value, userId });
     }
     await this.configRepository.save(config);
   }
 
-  async getAll(): Promise<Record<string, string>> {
-    const configs = await this.configRepository.find();
+  async getAll(userId: number): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
+    
+    const configs = await this.configRepository.findBy({ userId });
     configs.forEach(config => {
       result[config.key] = config.value;
     });

@@ -23,13 +23,13 @@ export class DocumentService {
     private noteRepository: Repository<Note>,
   ) {}
 
-  async findAll(categoryId?: number, tagIds?: string): Promise<Document[]> {
+  async findAll(userId: number, categoryId?: number, tagIds?: string): Promise<Document[]> {
     // 使用简单查询方式，避免queryBuilder的问题
-    const where: any = {};
+    const where: any = { userId };
     
     if (categoryId) {
       // 获取分类及其所有子分类的ID
-      const categoryIds = await this.getCategoryIdsWithChildren(categoryId);
+      const categoryIds = await this.getCategoryIdsWithChildren(userId, categoryId);
       where.category = { id: In(categoryIds) };
     }
     
@@ -55,26 +55,26 @@ export class DocumentService {
   }
 
   // 递归获取分类及其所有子分类的ID
-  private async getCategoryIdsWithChildren(categoryId: number): Promise<number[]> {
+  private async getCategoryIdsWithChildren(userId: number, categoryId: number): Promise<number[]> {
     const categoryIds: number[] = [categoryId];
     
     // 查询该分类的子分类（使用关系字段）
     const subCategories = await this.categoryRepository.find({
-      where: { parent: { id: categoryId } },
+      where: { parent: { id: categoryId }, userId },
     });
     
     // 递归获取子分类的子分类
     for (const subCat of subCategories) {
-      const childIds = await this.getCategoryIdsWithChildren(subCat.id);
+      const childIds = await this.getCategoryIdsWithChildren(userId, subCat.id);
       categoryIds.push(...childIds);
     }
     
     return categoryIds;
   }
 
-  async findOne(id: number): Promise<Document> {
+  async findOne(userId: number, id: number): Promise<Document> {
     const document = await this.documentRepository.findOne({
-      where: { id },
+      where: { id, userId },
       relations: { category: true, tags: true, attachments: true },
     });
     if (!document) {
@@ -97,13 +97,15 @@ export class DocumentService {
     }
   }
 
-  async search(keyword: string): Promise<Document[]> {
+  async search(userId: number, keyword: string): Promise<Document[]> {
     return this.documentRepository
       .createQueryBuilder('document')
       .leftJoinAndSelect('document.category', 'category')
       .leftJoinAndSelect('document.tags', 'tags')
-      .where('document.title LIKE :keyword', { keyword: `%${keyword}%` })
-      .orWhere('document.content LIKE :keyword', { keyword: `%${keyword}%` })
+      .where('document.userId = :userId', { userId })
+      .andWhere('document.title LIKE :keyword', { keyword: `%${keyword}%` })
+      .orWhere('document.userId = :userId', { userId })
+      .andWhere('document.content LIKE :keyword', { keyword: `%${keyword}%` })
       .getMany();
   }
 
@@ -112,9 +114,9 @@ export class DocumentService {
     return this.documentRepository.save(newDocument);
   }
 
-  async update(id: number, document: Partial<Document>): Promise<Document> {
+  async update(userId: number, id: number, document: Partial<Document>): Promise<Document> {
     // 使用 save 方法来正确处理关联关系
-    const existingDocument = await this.findOne(id);
+    const existingDocument = await this.findOne(userId, id);
     
     // 手动复制属性，避免覆盖附件等关联关系
     if (document.title !== undefined) {
@@ -137,7 +139,7 @@ export class DocumentService {
     return this.documentRepository.save(existingDocument);
   }
 
-  async addAttachments(documentId: number, files: any[]): Promise<void> {
+  async addAttachments(userId: number, documentId: number, files: any[]): Promise<void> {
     console.log('=== addAttachments called ===');
     console.log('Document ID:', documentId);
     console.log('Files received:', files);
@@ -145,7 +147,7 @@ export class DocumentService {
     const uploadDir = path.join(__dirname, '..', '..', '..', 'uploads');
     console.log('Upload directory:', uploadDir);
     
-    const document = await this.findOne(documentId);
+    const document = await this.findOne(userId, documentId);
     console.log('Document found:', document.title);
     
     for (const file of files) {
@@ -198,8 +200,8 @@ export class DocumentService {
     console.log('Document saved with', document.attachments.length, 'attachments');
   }
 
-  async remove(id: number): Promise<void> {
-    const document = await this.findOne(id);
+  async remove(userId: number, id: number): Promise<void> {
+    const document = await this.findOne(userId, id);
     
     // 先删除相关笔记（外键约束）
     await this.noteRepository.delete({ document: { id } });

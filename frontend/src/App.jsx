@@ -10,6 +10,8 @@ import Categories from './pages/Categories'
 import Tags from './pages/Tags'
 import SystemConfig from './pages/SystemConfig'
 import AIConfig from './pages/AIConfig'
+import Roles from './pages/Roles'
+import Users from './pages/Users'
 import Layout from './components/Layout'
 
 function App() {
@@ -28,6 +30,8 @@ function App() {
               <Route path="categories" element={<Categories />} />
               <Route path="tags" element={<Tags />} />
               <Route path="ai-config" element={<AIConfig />} />
+              <Route path="roles" element={<Roles />} />
+              <Route path="users" element={<Users />} />
               <Route path="system-config" element={<SystemConfig />} />
             </Route>
           </Routes>

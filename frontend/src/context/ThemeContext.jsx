@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import axios from 'axios'
 import { themes, defaultTheme } from '../config/themes'
 
 const ThemeContext = createContext()
@@ -43,12 +44,48 @@ export const ThemeProvider = ({ children }) => {
   // 获取当前主题的颜色配置
   const colors = themes[currentTheme]?.colors || themes[defaultTheme].colors
   
-  // 切换主题
-  const switchTheme = (themeId) => {
+  // 切换主题（保存到后端）
+  const switchTheme = useCallback(async (themeId) => {
+    if (themes[themeId]) {
+      setCurrentTheme(themeId)
+      
+      // 尝试保存到后端
+      try {
+        const token = localStorage.getItem('token')
+        if (token) {
+          await axios.put('/api/auth/theme', { theme: themeId }, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Failed to save theme to server:', error)
+      }
+    }
+  }, [])
+
+  // 设置用户主题（用于登录时）
+  const setUserTheme = useCallback((themeId) => {
     if (themes[themeId]) {
       setCurrentTheme(themeId)
     }
-  }
+  }, [])
+
+  // 监听用户主题事件（登录时触发）
+  useEffect(() => {
+    const handleUserTheme = (event) => {
+      const { theme } = event.detail
+      if (theme && themes[theme]) {
+        setCurrentTheme(theme)
+      }
+    }
+    
+    window.addEventListener('user-theme', handleUserTheme)
+    return () => {
+      window.removeEventListener('user-theme', handleUserTheme)
+    }
+  }, [])
 
   // 获取主题配置
   const getThemeConfig = (themeId) => {
@@ -58,6 +95,7 @@ export const ThemeProvider = ({ children }) => {
   const value = {
     currentTheme,
     switchTheme,
+    setUserTheme,
     colors,
     themes: Object.values(themes),
     getThemeConfig,

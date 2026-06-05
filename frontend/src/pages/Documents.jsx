@@ -639,7 +639,7 @@ export default function Documents() {
                   分类管理
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-4 px-3 space-y-1">
+              <CardContent className="pt-2 px-3 space-y-3">
                 {/* 全部文档按钮 */}
                 <button
                   onClick={() => {
@@ -763,19 +763,31 @@ export default function Documents() {
             </Card>
           </div>
 
-          {/* 右侧内容区域 */}
+          {/* 右侧内容区域（文档列表） */}
           <div className="flex-1 space-y-6">
             {/* 搜索卡片 */}
-            <Card className={cn(
-              cardClass(isDark, '', currentTheme),
-              "shadow-2xl overflow-hidden",
-              isDark 
-                ? isPolice 
-                  ? "bg-gradient-to-br from-[#1a2f50]/90 via-[#0f1f3d]/85 to-[#1a2f50]/90 backdrop-blur-xl border border-cyan-500/30 shadow-cyan-500/20 shadow-black/40"
-                  : "bg-slate-800/90 backdrop-blur-lg border border-slate-700/40 shadow-black/40"
-                : "bg-white/95 backdrop-blur-lg border border-gray-100 shadow-gray-200/80"
-            )}>
-              <CardContent className="pt-6 px-6">
+            <Card 
+              className={cn(
+                cardClass(isDark, '', currentTheme),
+                "shadow-2xl overflow-hidden",
+                isDark 
+                  ? isPolice 
+                    ? "bg-gradient-to-br from-[#1a2f50]/90 via-[#0f1f3d]/85 to-[#1a2f50]/90 backdrop-blur-xl border border-cyan-500/30 shadow-cyan-500/20 shadow-black/40"
+                    : "bg-slate-800/90 backdrop-blur-lg border border-slate-700/40 shadow-black/40"
+                  : "bg-white/95 backdrop-blur-lg border border-gray-100 shadow-gray-200/80"
+              )}
+              style={{ marginTop: '3px' }}
+            >
+              <CardHeader className={cn(
+                "pb-4 px-6",
+                isDark 
+                  ? isSpecialTheme
+                    ? cn("border-b", cardColors.border, "bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
+                    : "border-b border-slate-600/40 bg-gradient-to-r from-slate-700/60 to-transparent"
+                  : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+              )}>
+              </CardHeader>
+              <CardContent className="pt-4 px-6">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className={cn(
                     "flex-1 relative rounded-2xl overflow-hidden",
@@ -829,7 +841,7 @@ export default function Documents() {
             </Card>
 
             {/* 文档卡片网格 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-8">
               {filteredDocuments.map(document => (
                 <Card
                   key={document.id}
@@ -978,26 +990,47 @@ export default function Documents() {
             {/* 空状态 */}
             {filteredDocuments.length === 0 && (
               <Card className={cn(
-                cardClass(isDark, '', currentTheme),
-                "shadow-2xl",
-                isDark ? "shadow-black/40 border border-slate-700/30" : "shadow-gray-200/80 border border-gray-100"
+                "shadow-2xl border rounded-2xl overflow-hidden",
+                isPolice ? "shadow-blue-600/30 border-blue-500/30 bg-[#003366]/60 backdrop-blur-xl" :
+                isNight ? "shadow-violet-600/30 border-violet-500/30 bg-[#1a1333]/60 backdrop-blur-xl" :
+                isCyber ? "shadow-red-600/30 border-red-500/30 bg-[#18181b]/60 backdrop-blur-xl" :
+                (isDark ? "shadow-black/30 border-slate-700/30 bg-slate-800/50 backdrop-blur-xl" : "shadow-gray-200/50 border-gray-200/50 bg-white/90 backdrop-blur-xl")
               )}>
-                <CardContent className="text-center py-24">
+                <CardContent className="text-center py-16">
                   <div className={cn(
-                    "w-28 h-28 rounded-3xl flex items-center justify-center mx-auto mb-8 transition-all duration-500",
-                    isDark ? "bg-gradient-to-br from-slate-800/80 to-slate-700/80" : "bg-gradient-to-br from-gray-50 to-gray-100"
+                    "w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6 transition-all duration-500",
+                    isPolice ? "bg-gradient-to-br from-blue-600/40 to-cyan-600/40 shadow-lg shadow-blue-600/20" :
+                    isNight ? "bg-gradient-to-br from-violet-600/40 to-purple-600/40 shadow-lg shadow-violet-600/20" :
+                    isCyber ? "bg-gradient-to-br from-red-600/40 to-rose-600/40 shadow-lg shadow-red-600/20" :
+                    (isDark ? "bg-gradient-to-br from-slate-700/50 to-slate-600/50" : "bg-gradient-to-br from-gray-100 to-gray-200")
                   )}>
-                    <FileText className={cn("w-14 h-14", isDark ? "text-slate-600" : "text-gray-300")} />
+                    <FileText className={cn("w-12 h-12",
+                      isPolice ? "text-cyan-400/70" :
+                      isNight ? "text-violet-400/70" :
+                      isCyber ? "text-red-400/70" :
+                      (isDark ? "text-slate-500" : "text-gray-400")
+                    )} />
                   </div>
-                  <h3 className={cn("text-2xl font-bold mb-3", textClass('primary', isDark, currentTheme))}>暂无文档</h3>
-                  <p className={cn("text-base mb-8", textClass('muted', isDark, currentTheme))}>点击右上角按钮上传您的第一个文档</p>
+                  <h3 className={cn("text-xl font-bold mb-3", 
+                    isPolice ? "text-cyan-200" :
+                    isNight ? "text-violet-200" :
+                    isCyber ? "text-red-200" :
+                    (isDark ? "text-gray-200" : "text-gray-800")
+                  )}>暂无文档</h3>
+                  <p className={cn("text-sm mb-6", 
+                    isPolice ? "text-cyan-300/70" :
+                    isNight ? "text-violet-300/70" :
+                    isCyber ? "text-red-300/70" :
+                    (isDark ? "text-gray-400" : "text-gray-500")
+                  )}>点击右上角按钮上传您的第一个文档</p>
                   <Button 
                     onClick={() => setShowUploadModal(true)} 
                     className={cn(
-                      "shadow-lg rounded-xl",
-                      isDark 
-                        ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500" 
-                        : "bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-600"
+                      "shadow-lg rounded-xl px-8 py-3",
+                      isPolice ? "bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg shadow-blue-600/30" :
+                      isNight ? "bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-500 hover:to-purple-400 text-white shadow-lg shadow-violet-600/30" :
+                      isCyber ? "bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white shadow-lg shadow-red-600/30" :
+                      (isDark ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white" : "bg-gradient-to-r from-blue-500 to-indigo-600 text-white")
                     )}
                   >
                     <Upload className="w-5 h-5 mr-2" />
@@ -1015,7 +1048,7 @@ export default function Documents() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <Card className={cn(
             cardClass(isDark, '', currentTheme),
-            "w-full max-w-lg shadow-2xl overflow-hidden",
+            "w-full max-w-4xl shadow-2xl overflow-hidden",
             isDark ? "shadow-black/60 border border-slate-700/50" : "shadow-gray-300/60 border border-gray-100"
           )}>
             <CardHeader className={cn(
@@ -1052,162 +1085,181 @@ export default function Documents() {
                 </div>
               )}
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>文档标题</label>
-                <Input
-                  type="text"
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
-                  placeholder="输入文档标题"
-                  className={inputClass(isDark, '', currentTheme)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>文档描述</label>
-                <textarea
-                  value={uploadDescription}
-                  onChange={(e) => setUploadDescription(e.target.value)}
-                  placeholder="输入文档描述"
-                  rows={3}
-                  className={cn(
-                    "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 resize-none transition-all duration-200",
-                    isDark 
-                      ? "bg-slate-700/70 border-slate-600/50 text-slate-100 placeholder:text-slate-500 focus:ring-blue-500/50" 
-                      : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:ring-blue-500/30"
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>选择分类</label>
-                <select
-                  value={selectedCategory || ''}
-                  onChange={(e) => setSelectedCategory(e.target.value ? +e.target.value : null)}
-                  className={cn(
-                    "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-200",
-                    isDark 
-                      ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-blue-500/50" 
-                      : "bg-white border-gray-300 text-gray-900 focus:ring-blue-500/30"
-                  )}
-                >
-                  <option value="">无分类</option>
-                  {renderCategoryOptions(categories)}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>选择标签</label>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map(tag => {
-                    const isSelected = selectedTags.includes(tag.id)
-                    return (
-                      <Badge
-                        key={tag.id}
-                        onClick={() => toggleTag(tag.id)}
+            <CardContent className="flex-1 overflow-hidden">
+              <div className="flex gap-6 h-full">
+                {/* 左侧：基本信息 */}
+                <div className="flex-1 flex flex-col overflow-y-auto pr-2">
+                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
+                    基本信息
+                  </h3>
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>文档标题</label>
+                      <Input
+                        type="text"
+                        value={uploadTitle}
+                        onChange={(e) => setUploadTitle(e.target.value)}
+                        placeholder="输入文档标题"
+                        className={inputClass(isDark, '', currentTheme)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>文档描述</label>
+                      <textarea
+                        value={uploadDescription}
+                        onChange={(e) => setUploadDescription(e.target.value)}
+                        placeholder="输入文档描述"
+                        rows={4}
                         className={cn(
-                          "cursor-pointer transition-all duration-300",
-                          isSelected
-                            ? isDark
-                              ? "bg-blue-500/30 text-blue-300 border-blue-500/50"
-                              : "bg-blue-100 text-blue-600 border-blue-300"
-                            : isDark
-                              ? "bg-slate-700/50 text-slate-300 border-slate-600/30 hover:bg-slate-600/50"
-                              : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                          "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 resize-none transition-all duration-200",
+                          isDark 
+                            ? "bg-slate-700/70 border-slate-600/50 text-slate-100 placeholder:text-slate-500 focus:ring-blue-500/50" 
+                            : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:ring-blue-500/30"
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>选择分类</label>
+                      <select
+                        value={selectedCategory || ''}
+                        onChange={(e) => setSelectedCategory(e.target.value ? +e.target.value : null)}
+                        className={cn(
+                          "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-200",
+                          isDark 
+                            ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-blue-500/50" 
+                            : "bg-white border-gray-300 text-gray-900 focus:ring-blue-500/30"
                         )}
                       >
-                        <Tag className="w-3 h-3 mr-1" />
-                        {tag.name}
-                      </Badge>
-                    )
-                  })}
+                        <option value="">无分类</option>
+                        {renderCategoryOptions(categories)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>选择标签</label>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map(tag => {
+                          const isSelected = selectedTags.includes(tag.id)
+                          return (
+                            <Badge
+                              key={tag.id}
+                              onClick={() => toggleTag(tag.id)}
+                              className={cn(
+                                "cursor-pointer transition-all duration-300",
+                                isSelected
+                                  ? isDark
+                                    ? "bg-blue-500/30 text-blue-300 border-blue-500/50"
+                                    : "bg-blue-100 text-blue-600 border-blue-300"
+                                  : isDark
+                                    ? "bg-slate-700/50 text-slate-300 border-slate-600/30 hover:bg-slate-600/50"
+                                    : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                              )}
+                            >
+                              <Tag className="w-3 h-3 mr-1" />
+                              {tag.name}
+                            </Badge>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* 右侧：文件上传区域 */}
+                <div className="w-80 flex-shrink-0 flex flex-col">
+                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
+                    上传文件
+                  </h3>
+                  <div className="flex-1 overflow-y-auto pr-2">
+                    {/* 文件上传区域 */}
+                    <label
+                      htmlFor="upload-file-input"
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-4 p-5 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300 mb-4",
+                        uploadFiles.length > 0
+                          ? isDark
+                            ? "border-blue-500/50 bg-blue-500/5"
+                            : "border-blue-400 bg-blue-50"
+                          : isDark
+                            ? "border-slate-600/50 hover:border-blue-500/50 hover:bg-slate-700/30"
+                            : "border-gray-300 hover:border-blue-400 hover:bg-blue-50/50"
+                      )}
+                    >
+                      <Upload className={cn(
+                        "w-10 h-10",
+                        uploadFiles.length > 0
+                          ? isDark ? "text-blue-400" : "text-blue-500"
+                          : isDark ? "text-slate-500" : "text-gray-400"
+                      )} />
+                      <p className={cn(
+                        "text-sm font-medium text-center",
+                        uploadFiles.length > 0
+                          ? isDark ? "text-blue-300" : "text-blue-600"
+                          : textClass('secondary', isDark, currentTheme)
+                      )}>
+                        {uploadFiles.length > 0
+                          ? `已选择 ${uploadFiles.length} 个文件`
+                          : '点击或拖拽文件到此处上传'}
+                      </p>
+                      <p className={cn("text-xs", textClass('muted', isDark, currentTheme))}>
+                        支持 PDF, DOC, DOCX, MD, TXT, JPG, PNG, GIF, MP3, MP4 等格式
+                      </p>
+                      <input
+                        id="upload-file-input"
+                        type="file"
+                        multiple
+                        accept=".pdf,.docx,.doc,.md,.txt,.jpg,.jpeg,.png,.gif,.mp3,.mp4,.wav,.avi,.mov,.webm"
+                        className="hidden"
+                        onChange={(e) => setUploadFiles([...uploadFiles, ...Array.from(e.target.files)])}
+                      />
+                    </label>
+                    
+                    {/* 文件列表 */}
+                    {uploadFiles.length > 0 && (
+                      <div className="space-y-2">
+                        {uploadFiles.map((file, index) => (
+                          <div key={index} className={cn(
+                            "flex items-center gap-3 p-3 rounded-xl transition-all duration-200",
+                            isDark ? "bg-slate-700/50 hover:bg-slate-700/70" : "bg-gray-50 hover:bg-gray-100"
+                          )}>
+                            <div className={cn(
+                              "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
+                              file.type.includes('pdf') ? (isDark ? "bg-gradient-to-br from-red-600/30 to-red-700/30 text-red-400" : "bg-gradient-to-br from-red-100 to-red-200 text-red-600") :
+                              file.type.includes('image') ? (isDark ? "bg-gradient-to-br from-purple-600/30 to-purple-700/30 text-purple-400" : "bg-gradient-to-br from-purple-100 to-purple-200 text-purple-600") :
+                              file.type.includes('video') ? (isDark ? "bg-gradient-to-br from-pink-600/30 to-pink-700/30 text-pink-400" : "bg-gradient-to-br from-pink-100 to-pink-200 text-pink-600") :
+                              file.type.includes('audio') ? (isDark ? "bg-gradient-to-br from-orange-600/30 to-orange-700/30 text-orange-400" : "bg-gradient-to-br from-orange-100 to-orange-200 text-orange-600") :
+                              (isDark ? "bg-gradient-to-br from-slate-600/30 to-slate-700/30 text-slate-400" : "bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600")
+                            )}>
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn("text-sm font-medium truncate", textClass('primary', isDark, currentTheme))}>{file.name}</p>
+                              <p className={cn("text-xs", textClass('muted', isDark, currentTheme))}>
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setUploadFiles(uploadFiles.filter((_, i) => i !== index))}
+                              className={cn(
+                                "p-2 rounded-lg transition-all duration-200 flex-shrink-0",
+                                isDark ? "hover:bg-red-500/20 text-slate-400 hover:text-red-400" : "hover:bg-red-50 text-gray-400 hover:text-red-500"
+                              )}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              
-              {/* 文件上传区域 */}
-              <div className="space-y-2">
-                <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>上传文件</label>
-                <label
-                  htmlFor="upload-file-input"
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-4 p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300",
-                    uploadFiles.length > 0
-                      ? isDark
-                        ? "border-blue-500/50 bg-blue-500/5"
-                        : "border-blue-400 bg-blue-50"
-                      : isDark
-                        ? "border-slate-600/50 hover:border-blue-500/50 hover:bg-slate-700/30"
-                        : "border-gray-300 hover:border-blue-400 hover:bg-blue-50/50"
-                  )}
-                >
-                  <Upload className={cn(
-                    "w-10 h-10",
-                    uploadFiles.length > 0
-                      ? isDark ? "text-blue-400" : "text-blue-500"
-                      : isDark ? "text-slate-500" : "text-gray-400"
-                  )} />
-                  <p className={cn(
-                    "text-sm font-medium",
-                    uploadFiles.length > 0
-                      ? isDark ? "text-blue-300" : "text-blue-600"
-                      : textClass('secondary', isDark, currentTheme)
-                  )}>
-                    {uploadFiles.length > 0
-                      ? `已选择 ${uploadFiles.length} 个文件`
-                      : '点击或拖拽文件到此处上传'}
-                  </p>
-                  <p className={cn("text-xs mt-1", textClass('muted', isDark, currentTheme))}>
-                    支持 PDF, DOC, DOCX, MD, TXT, JPG, PNG, GIF, MP3, MP4 等格式
-                  </p>
-                  <input
-                    id="upload-file-input"
-                    type="file"
-                    multiple
-                    accept=".pdf,.docx,.doc,.md,.txt,.jpg,.jpeg,.png,.gif,.mp3,.mp4,.wav,.avi,.mov,.webm"
-                    className="hidden"
-                    onChange={(e) => setUploadFiles([...uploadFiles, ...Array.from(e.target.files)])}
-                  />
-                </label>
-                {uploadFiles.length > 0 && (
-                  <div className="space-y-2">
-                    {uploadFiles.map((file, index) => (
-                      <div key={index} className={cn(
-                        "flex items-center gap-3 p-4 rounded-xl transition-all duration-200",
-                        isDark ? "bg-slate-700/50" : "bg-gray-50"
-                      )}>
-                        <div className={cn(
-                          "w-11 h-11 rounded-xl flex items-center justify-center",
-                          file.type.includes('pdf') ? (isDark ? "bg-gradient-to-br from-red-600/30 to-red-700/30 text-red-400" : "bg-gradient-to-br from-red-100 to-red-200 text-red-600") :
-                          file.type.includes('image') ? (isDark ? "bg-gradient-to-br from-purple-600/30 to-purple-700/30 text-purple-400" : "bg-gradient-to-br from-purple-100 to-purple-200 text-purple-600") :
-                          file.type.includes('video') ? (isDark ? "bg-gradient-to-br from-pink-600/30 to-pink-700/30 text-pink-400" : "bg-gradient-to-br from-pink-100 to-pink-200 text-pink-600") :
-                          file.type.includes('audio') ? (isDark ? "bg-gradient-to-br from-orange-600/30 to-orange-700/30 text-orange-400" : "bg-gradient-to-br from-orange-100 to-orange-200 text-orange-600") :
-                          (isDark ? "bg-gradient-to-br from-slate-600/30 to-slate-700/30 text-slate-400" : "bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600")
-                        )}>
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn("text-sm font-medium truncate", textClass('primary', isDark, currentTheme))}>{file.name}</p>
-                          <p className={cn("text-xs", textClass('muted', isDark, currentTheme))}>
-                            {(file.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setUploadFiles(uploadFiles.filter((_, i) => i !== index))}
-                          className={cn(
-                            "p-2.5 rounded-xl transition-all duration-200",
-                            isDark ? "hover:bg-red-500/20 text-slate-400 hover:text-red-400" : "hover:bg-red-50 text-gray-400 hover:text-red-500"
-                          )}
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex gap-3 pt-4">
+            </CardContent>
+            <div className={cn(
+              "flex gap-3 p-4 border-t flex-shrink-0",
+              isDark ? "border-slate-700/50 bg-slate-800/80" : "border-gray-100 bg-gray-50"
+            )}>
                 <Button
                   variant="outline"
-                  className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30" : "border-gray-300")}
+                  className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "border-gray-300")}
                   onClick={() => {
                     setShowUploadModal(false)
                     setUploadFiles([])
@@ -1231,7 +1283,6 @@ export default function Documents() {
                   上传文档
                 </Button>
               </div>
-            </CardContent>
           </Card>
         </div>
       )}
@@ -1425,7 +1476,7 @@ export default function Documents() {
             )}>
               <Button
                 variant="outline"
-                className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-gray-200" : "border-gray-300")}
+                className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "border-gray-300")}
                 onClick={() => {
                   setShowEditModal(false)
                   setEditingDocument(null)
