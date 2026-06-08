@@ -12,6 +12,7 @@ import SystemConfig from './pages/SystemConfig'
 import AIConfig from './pages/AIConfig'
 import Roles from './pages/Roles'
 import Users from './pages/Users'
+import Logs from './pages/Logs'
 import Layout from './components/Layout'
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
               <Route path="ai-config" element={<AIConfig />} />
               <Route path="roles" element={<Roles />} />
               <Route path="users" element={<Users />} />
+              <Route path="logs" element={<Logs />} />
               <Route path="system-config" element={<SystemConfig />} />
             </Route>
           </Routes>

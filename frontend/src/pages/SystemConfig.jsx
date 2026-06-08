@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Settings, Save, RotateCcw, CheckCircle, Palette } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Settings, Save, RotateCcw, CheckCircle, Palette, GripVertical, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -8,10 +8,13 @@ import { useConfig } from '../context/ConfigContext'
 import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
 import { cardClass, textClass, inputClass } from '../lib/themeStyles'
+import { useAuth } from '../context/AuthContext'
+import axios from 'axios'
 
 export default function SystemConfig() {
   const { config, saveConfig } = useConfig()
   const { currentTheme, switchTheme, themes, isDark } = useTheme()
+  const { user, refreshUser } = useAuth()
   const isPolice = currentTheme === 'police'
   const isNight = currentTheme === 'night'
   const isCyber = currentTheme === 'cyber'
@@ -20,6 +23,43 @@ export default function SystemConfig() {
   const isOrange = currentTheme === 'orange'
   const isPink = currentTheme === 'pink'
   const isSpecialTheme = isPolice || isNight || isCyber || isPurple || isGreen || isOrange || isPink
+
+  const allMenuItems = useMemo(() => [
+    { id: 'documents', label: '文档管理' },
+    { id: 'categories', label: '分类管理' },
+    { id: 'tags', label: '标签管理' },
+    { id: 'ai-config', label: 'AI模型配置' },
+    { id: 'roles', label: '角色管理' },
+    { id: 'users', label: '用户管理' },
+    { id: 'logs', label: '系统日志' },
+    { id: 'system-config', label: '系统配置' },
+  ], [])
+
+  // 获取用户有权限访问的菜单
+  const menuItems = useMemo(() => {
+    console.log('SystemConfig - user:', user);
+    console.log('SystemConfig - user?.role:', user?.role);
+    if (!user?.role) return allMenuItems
+    
+    let permissions = user.role.permissions
+    if (typeof permissions === 'string') {
+      try {
+        permissions = JSON.parse(permissions)
+      } catch (e) {
+        return allMenuItems
+      }
+    }
+    
+    const userMenus = permissions?.menus
+    if (!userMenus || !Array.isArray(userMenus)) return allMenuItems
+    
+    return allMenuItems.filter(item => userMenus.includes(item.id))
+  }, [user, allMenuItems])
+
+  const [dragOverIndex, setDragOverIndex] = useState(null)
+  const [draggedIndex, setDraggedIndex] = useState(null)
+  const [menuOrder, setMenuOrder] = useState([])
+  const [menuSaved, setMenuSaved] = useState(false)
 
   // 获取主题特定的主色调用于渐变和装饰
   const getGradientColors = () => {
@@ -55,13 +95,58 @@ export default function SystemConfig() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    setConfigs({
-      siteName: config.siteName || '知识库管理系统',
-      loginTitle: config.loginTitle || '欢迎登录',
-      loginSubtitle: config.loginSubtitle || '管理您的文档和知识',
-      copyright: config.copyright || '2024 知识库管理系统 版权所有',
-    })
-  }, [config])
+    const savedOrder = user?.menuOrder
+    if (savedOrder && Array.isArray(savedOrder)) {
+      // 只保留用户有权限的菜单
+      const filteredOrder = savedOrder.filter(id => menuItems.some(item => item.id === id))
+      // 添加用户有权限但排序中没有的菜单
+      const missingMenus = menuItems.filter(item => !filteredOrder.includes(item.id)).map(item => item.id)
+      setMenuOrder([...filteredOrder, ...missingMenus])
+    } else {
+      setMenuOrder(menuItems.map(item => item.id))
+    }
+  }, [user, menuItems])
+
+  const moveMenuUp = (index) => {
+    if (index === 0) return
+    const newOrder = [...menuOrder]
+    ;[newOrder[index], newOrder[index - 1]] = [newOrder[index - 1], newOrder[index]]
+    setMenuOrder(newOrder)
+    setMenuSaved(false)
+  }
+
+  const moveMenuDown = (index) => {
+    if (index === menuOrder.length - 1) return
+    const newOrder = [...menuOrder]
+    ;[newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]]
+    setMenuOrder(newOrder)
+    setMenuSaved(false)
+  }
+
+  const resetMenuOrder = () => {
+    setMenuOrder(menuItems.map(item => item.id))
+    setMenuSaved(false)
+  }
+
+  const saveMenuOrder = async () => {
+    try {
+      // 只保存用户有权限的菜单
+      const filteredOrder = menuOrder.filter(menuId => menuItems.some(item => item.id === menuId))
+      await axios.put('/api/auth/menu-order', { menuOrder: filteredOrder })
+      // 直接更新本地用户状态的 menuOrder，不调用 refreshUser 避免覆盖 role 信息
+      if (user) {
+        const updatedUser = { ...user, menuOrder: filteredOrder }
+        localStorage.setItem('user', JSON.stringify(updatedUser))
+        // 强制更新用户状态
+        const event = new CustomEvent('user-menu-order-update', { detail: { menuOrder: filteredOrder } })
+        window.dispatchEvent(event)
+      }
+      setMenuSaved(true)
+      setTimeout(() => setMenuSaved(false), 3000)
+    } catch (error) {
+      console.error('Failed to save menu order:', error)
+    }
+  }
 
   const handleChange = (key, value) => {
     setConfigs(prev => ({ ...prev, [key]: value }))
@@ -261,6 +346,138 @@ export default function SystemConfig() {
           <p className={cn("text-sm mt-4", textClass('muted', isDark, currentTheme))}>
             提示：选择主题后，系统界面将立即切换到对应的主题风格
           </p>
+        </CardContent>
+      </Card>
+
+      <Card className={cn(cardClass(isDark, '', currentTheme), "shadow-lg")}>
+        <CardHeader>
+          <CardTitle className={cn("flex items-center gap-2", textClass('primary', isDark, currentTheme))}>
+            <GripVertical className={cn("w-5 h-5", isDark ? "text-cyan-400" : "text-blue-500")} />
+            菜单排序
+          </CardTitle>
+          <CardDescription className={textClass('muted', isDark, currentTheme)}>
+            拖拽或点击调整顶部菜单的显示顺序（仅对当前用户生效）
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 mb-4">
+            {menuOrder.filter(menuId => menuItems.some(item => item.id === menuId)).map((menuId, index) => {
+              const menu = menuItems.find(item => item.id === menuId)
+              if (!menu) return null
+              return (
+                <div
+                  key={menuId}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedIndex(index)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragEnd={() => {
+                    setDraggedIndex(null)
+                    setDragOverIndex(null)
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverIndex(index)
+                  }}
+                  onDrop={() => {
+                    if (draggedIndex !== null && draggedIndex !== index) {
+                      const newOrder = [...menuOrder]
+                      const [draggedItem] = newOrder.splice(draggedIndex, 1)
+                      newOrder.splice(index, 0, draggedItem)
+                      setMenuOrder(newOrder)
+                      setMenuSaved(false)
+                    }
+                    setDraggedIndex(null)
+                    setDragOverIndex(null)
+                  }}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-grab active:cursor-grabbing",
+                    isDark ? "bg-slate-700/30 border-slate-600/50 hover:border-cyan-500/50" : "bg-gray-50 border-gray-200 hover:border-blue-300",
+                    draggedIndex === index && "opacity-50 scale-95",
+                    dragOverIndex === index && draggedIndex !== index && (isDark ? "border-cyan-500 bg-cyan-500/10" : "border-blue-500 bg-blue-50")
+                  )}
+                >
+                  <GripVertical className={cn("w-5 h-5 flex-shrink-0", isDark ? "text-slate-400" : "text-gray-400")} />
+                  <span className={cn("flex-1 font-medium", textClass('secondary', isDark, currentTheme))}>
+                    {menu.label}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => moveMenuUp(index)}
+                      disabled={index === 0}
+                      className={cn(
+                        "h-8 w-8 rounded-lg",
+                        index === 0 ? "opacity-30 cursor-not-allowed" : "",
+                        isDark ? "hover:bg-slate-600/50" : "hover:bg-blue-100"
+                      )}
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => moveMenuDown(index)}
+                      disabled={index === menuOrder.length - 1}
+                      className={cn(
+                        "h-8 w-8 rounded-lg",
+                        index === menuOrder.length - 1 ? "opacity-30 cursor-not-allowed" : "",
+                        isDark ? "hover:bg-slate-600/50" : "hover:bg-blue-100"
+                      )}
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          
+          {menuSaved && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-3 rounded-lg mb-4",
+              isDark 
+                ? isSpecialTheme
+                  ? cn("bg", `-${cardColors.success}-500/15`, "border", cardColors.border)
+                  : "bg-green-500/15 border border-green-500/30"
+                : "bg-green-50 border border-green-200"
+            )}>
+              <CheckCircle className={cn(
+                "w-5 h-5",
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-400` : "text-green-400" : "text-green-500"
+              )} />
+              <span className={cn(
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-300` : "text-green-300" : "text-green-700"
+              )}>菜单排序已保存成功！</span>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={resetMenuOrder}
+              className={cn(
+                "flex items-center gap-2",
+                isDark && isSpecialTheme ? cn(cardColors.border, `text-${gradientColors.accent}-400`) : isDark && "border-slate-600/50 hover:bg-slate-700/30 text-gray-200"
+              )}
+            >
+              <RefreshCw className="w-4 h-4" />
+              重置排序
+            </Button>
+            <Button
+              onClick={saveMenuOrder}
+              className={cn("shadow-lg",
+                isDark && isSpecialTheme 
+                  ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`)
+                  : "bg-blue-600 hover:bg-blue-700")}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              保存排序
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

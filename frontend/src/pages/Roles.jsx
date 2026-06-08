@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useTheme } from '../context/ThemeContext'
+import { useAuth } from '../context/AuthContext'
 import { cn } from '../lib/utils'
 import axios from 'axios'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -17,10 +18,12 @@ const MENU_ITEMS = [
   { id: 'ai-config', label: 'AI配置' },
   { id: 'roles', label: '角色管理' },
   { id: 'users', label: '用户管理' },
+  { id: 'logs', label: '系统日志' },
 ]
 
 export default function Roles() {
   const { isDark } = useTheme()
+  const { refreshUser } = useAuth()
   const [roles, setRoles] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -67,6 +70,7 @@ export default function Roles() {
       setDescription('')
       setPermissions({ menus: [], edit: false, delete: false })
       fetchRoles()
+      await refreshUser()
     } catch (error) {
       console.error('Failed to update role:', error)
     }

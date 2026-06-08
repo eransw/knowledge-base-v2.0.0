@@ -8,6 +8,7 @@ import { ConfigModule } from './modules/config/config.module';
 import { NoteModule } from './modules/note/note.module';
 import { AiModule } from './modules/ai/ai.module';
 import { RoleModule } from './modules/role/role.module';
+import { LogModule } from './modules/log/log.module';
 import * as path from 'path';
 
 @Module({
@@ -26,6 +27,7 @@ import * as path from 'path';
     NoteModule,
     AiModule,
     RoleModule,
+    LogModule,
   ],
 })
 export class AppModule {}

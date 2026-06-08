@@ -15,9 +15,10 @@ import {
   Settings,
   Bot,
   Shield,
-  Users
+  Users,
+  FileText
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from './ui/button'
 import { cn } from '../lib/utils'
 
@@ -41,12 +42,15 @@ export default function Layout() {
     { icon: Bot, label: 'AI模型配置', path: '/ai-config', menuId: 'ai-config' },
     { icon: Shield, label: '角色管理', path: '/roles', menuId: 'roles' },
     { icon: Users, label: '用户管理', path: '/users', menuId: 'users' },
+    { icon: FileText, label: '系统日志', path: '/logs', menuId: 'logs' },
     { icon: Settings, label: '系统配置', path: '/system-config', menuId: 'system-config' },
   ]
 
   const isActive = (path) => location.pathname === path
 
-  const filteredNavItems = () => {
+  const filteredNavItems = useMemo(() => {
+    console.log('Layout - user:', user);
+    console.log('Layout - user?.role:', user?.role);
     if (!user?.role) {
       console.warn('No user or role found, showing all menus')
       return navItems
@@ -68,8 +72,21 @@ export default function Layout() {
       return navItems
     }
     
-    return navItems.filter(item => userMenus.includes(item.menuId))
-  }
+    const filtered = navItems.filter(item => userMenus.includes(item.menuId))
+    
+    const customOrder = user?.menuOrder
+    if (customOrder && Array.isArray(customOrder)) {
+      return [...filtered].sort((a, b) => {
+        const indexA = customOrder.indexOf(a.menuId)
+        const indexB = customOrder.indexOf(b.menuId)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
+      })
+    }
+    
+    return filtered
+  }, [user, navItems])
   const isPolice = currentTheme === 'police'
   const isNight = currentTheme === 'night'
   const isCyber = currentTheme === 'cyber'
@@ -236,7 +253,7 @@ export default function Layout() {
 
               <nav className="hidden md:flex items-center gap-1 ml-4 overflow-x-auto scrollbar-hide flex-1">
                 <div className="flex items-center gap-1 whitespace-nowrap">
-                  {filteredNavItems().map((item) => (
+                  {filteredNavItems.map((item) => (
                     <button
                       key={item.path}
                       onClick={() => navigate(item.path)}
@@ -312,7 +329,7 @@ export default function Layout() {
             (isDark ? cn(colors.border.primary, "bg-slate-900/95") : "border-gray-200/50 bg-white")
           )}>
             <nav className="px-4 py-4 space-y-2">
-              {filteredNavItems().map((item) => (
+              {filteredNavItems.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => {

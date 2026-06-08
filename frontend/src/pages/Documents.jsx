@@ -349,11 +349,13 @@ export default function Documents() {
             "w-full text-left px-3 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 group",
             selectedCategory === category.id
               ? isDark 
-                ? 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-purple-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20' 
-                : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
-              : isDark 
-                ? 'hover:bg-slate-700/60 text-slate-200 hover:text-white hover:border-slate-600/30' 
-                : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900 hover:border-gray-200/50'
+                ? isSpecialTheme
+                  ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-600/20`, `to-${gradientColors.accent}-500/20`, `text-${gradientColors.accent}-200`, `shadow-lg`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
+                : 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-purple-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20'
+              : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
+            : isDark 
+              ? 'hover:bg-slate-700/60 text-slate-200 hover:text-white hover:border-slate-600/30' 
+              : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900 hover:border-gray-200/50'
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
         >
@@ -381,21 +383,31 @@ export default function Documents() {
           <div className={cn(
             "w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300",
             selectedCategory === category.id
-              ? isDark ? "bg-blue-500/30 backdrop-blur-sm" : "bg-blue-100"
-              : isDark ? "bg-slate-700/40 group-hover:bg-blue-500/20" : "bg-gray-100 group-hover:bg-blue-50"
+              ? isDark 
+                ? isSpecialTheme ? `bg-${gradientColors.accent}-500/30 backdrop-blur-sm` : "bg-blue-500/30 backdrop-blur-sm"
+                : "bg-blue-100"
+              : isDark 
+                ? isSpecialTheme ? `bg-slate-700/40 group-hover:bg-${gradientColors.accent}-500/20` : "bg-slate-700/40 group-hover:bg-blue-500/20"
+                : "bg-gray-100 group-hover:bg-blue-50"
           )}>
             <FolderOpen className={cn(
               "w-5 h-5",
               selectedCategory === category.id
-                ? isDark ? "text-blue-400" : "text-blue-500"
-                : isDark ? "text-slate-300 group-hover:text-blue-400" : "text-gray-500 group-hover:text-blue-500"
+                ? isDark 
+                  ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-blue-400"
+                  : "text-blue-500"
+                : isDark 
+                  ? isSpecialTheme ? `text-slate-300 group-hover:text-${gradientColors.accent}-400` : "text-slate-300 group-hover:text-blue-400"
+                  : "text-gray-500 group-hover:text-blue-500"
             )} />
           </div>
           <span className={cn("flex-1 text-sm font-semibold truncate", isDark ? "text-slate-200" : "text-gray-700")}>{category.name}</span>
           <span className={cn(
             "text-xs px-3 py-1.5 rounded-full font-semibold transition-all duration-300",
             selectedCategory === category.id
-              ? isDark ? "bg-blue-500/30 text-blue-300 border border-blue-500/30" : "bg-blue-100 text-blue-600"
+              ? isDark 
+                ? isSpecialTheme ? cn(`bg-${gradientColors.accent}-500/30`, `text-${gradientColors.accent}-300`, `border border-${gradientColors.accent}-500/30`) : "bg-blue-500/30 text-blue-300 border border-blue-500/30"
+                : "bg-blue-100 text-blue-600"
               : isDark ? "bg-slate-700/60 text-slate-300" : "bg-gray-100 text-gray-500"
           )}>{getDocumentCount(category.id)}</span>
         </button>
@@ -539,17 +551,21 @@ export default function Documents() {
               <div className={cn(
                 "w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-500 hover:scale-105",
                 isDark 
-                  ? "bg-gradient-to-br from-blue-500/30 via-cyan-500/20 to-blue-500/30 backdrop-blur-md shadow-cyan-500/40 border border-blue-500/30" 
+                  ? isSpecialTheme
+                    ? cn("bg-gradient-to-br", `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-400/20`, `to-${gradientColors.accent}-500/30`, "backdrop-blur-md", `shadow-${gradientColors.accent}-500/40`, `border border-${gradientColors.accent}-500/30`)
+                    : "bg-gradient-to-br from-blue-500/30 via-cyan-500/20 to-blue-500/30 backdrop-blur-md shadow-cyan-500/40 border border-blue-500/30" 
                   : "bg-gradient-to-br from-blue-100 via-cyan-100 to-blue-100 shadow-blue-200/50"
               )}>
-                <FileText className={cn("w-7 h-7", isDark ? "text-cyan-400" : "text-blue-500")} />
+                <FileText className={cn("w-7 h-7", isDark ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-cyan-400" : "text-blue-500")} />
               </div>
               <div>
                 <h1 className={cn(
                   "text-4xl lg:text-5xl font-bold",
                   isDark 
-                    ? "bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent"
-                    : "bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-600 bg-clip-text text-transparent"
+                    ? isSpecialTheme
+                      ? "text-white drop-shadow-lg"
+                      : "text-white drop-shadow-lg"
+                    : "text-gray-800"
                 )}>
                   文档管理
                 </h1>
@@ -634,7 +650,7 @@ export default function Documents() {
                         : "bg-gradient-to-br from-cyan-500/30 to-blue-500/30 shadow-cyan-500/20"
                       : "bg-gradient-to-br from-blue-100 to-cyan-100"
                   )}>
-                    <FolderOpen className={cn("w-5 h-5", isDark ? `text-${gradientColors.accent}-400` : "text-blue-500")} />
+                    <FolderOpen className={cn("w-5 h-5", isDark ? (isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-cyan-400") : "text-blue-500")} />
                   </div>
                   分类管理
                 </CardTitle>
@@ -650,7 +666,9 @@ export default function Documents() {
                     "w-full text-left px-4 py-3.5 rounded-xl transition-all duration-300 flex items-center gap-3",
                     !selectedCategory && !selectedTag
                       ? isDark 
-                        ? 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-indigo-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20' 
+                        ? isSpecialTheme
+                          ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-600/20`, `to-${gradientColors.accent}-500/20`, `text-${gradientColors.accent}-200`, `shadow-lg`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
+                          : 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-indigo-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20'
                         : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
                       : isDark 
                         ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
@@ -660,13 +678,17 @@ export default function Documents() {
                   <div className={cn(
                     "w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300",
                     !selectedCategory && !selectedTag
-                      ? isDark ? "bg-blue-500/30" : "bg-blue-100"
+                      ? isDark 
+                        ? isSpecialTheme ? `bg-${gradientColors.accent}-500/30` : "bg-blue-500/30"
+                        : "bg-blue-100"
                       : isDark ? "bg-slate-700/40" : "bg-gray-100"
                   )}>
                     <FolderOpen className={cn(
                       "w-4.5 h-4.5",
                       !selectedCategory && !selectedTag
-                        ? isDark ? "text-blue-400" : "text-blue-500"
+                        ? isDark 
+                          ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-blue-400"
+                          : "text-blue-500"
                         : isDark ? "text-slate-400" : "text-gray-500"
                     )} />
                   </div>
@@ -674,7 +696,9 @@ export default function Documents() {
                   <span className={cn(
                     "text-xs px-3 py-1.5 rounded-full font-medium",
                     !selectedCategory && !selectedTag
-                      ? isDark ? "bg-blue-500/30 text-blue-300" : "bg-blue-100 text-blue-600"
+                      ? isDark 
+                        ? isSpecialTheme ? cn(`bg-${gradientColors.accent}-500/30`, `text-${gradientColors.accent}-300`) : "bg-blue-500/30 text-blue-300"
+                        : "bg-blue-100 text-blue-600"
                       : isDark ? "bg-slate-700/50 text-slate-400" : "bg-gray-100 text-gray-500"
                   )}>{allDocuments.length}</span>
                 </button>
@@ -713,7 +737,7 @@ export default function Documents() {
                         : "bg-gradient-to-br from-cyan-500/30 to-blue-500/30 shadow-cyan-500/20"
                       : "bg-gradient-to-br from-blue-100 to-cyan-100"
                   )}>
-                    <Tag className={cn("w-5 h-5", isDark ? `text-${gradientColors.accent}-400` : "text-blue-500")} />
+                    <Tag className={cn("w-5 h-5", isDark ? (isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-cyan-400") : "text-blue-500")} />
                   </div>
                   标签筛选
                 </CardTitle>
@@ -734,11 +758,13 @@ export default function Documents() {
                           "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 flex items-center gap-2",
                           isSelected
                             ? isDark 
-                              ? 'bg-gradient-to-r from-cyan-500/30 via-blue-500/20 to-cyan-500/30 text-cyan-200 shadow-md shadow-cyan-500/15 border border-cyan-500/20' 
-                              : 'bg-gradient-to-r from-blue-50 via-cyan-50 to-blue-50 text-blue-700 shadow-md border border-blue-200/50'
-                            : isDark 
-                              ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
-                              : 'hover:bg-gray-100 text-gray-700'
+                              ? isSpecialTheme
+                                ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-400/20`, `to-${gradientColors.accent}-500/30`, `text-${gradientColors.accent}-200`, `shadow-md`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
+                              : 'bg-gradient-to-r from-cyan-500/30 via-blue-500/20 to-cyan-500/30 text-cyan-200 shadow-md shadow-cyan-500/15 border border-cyan-500/20' 
+                            : 'bg-gradient-to-r from-blue-50 via-cyan-50 to-blue-50 text-blue-700 shadow-md border border-blue-200/50'
+                          : isDark 
+                            ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
+                            : 'hover:bg-gray-100 text-gray-700'
                         )}
                       >
                         <div
@@ -791,11 +817,15 @@ export default function Documents() {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className={cn(
                     "flex-1 relative rounded-2xl overflow-hidden",
-                    isDark ? "bg-slate-900/80 border border-slate-700/50 shadow-inner" : "bg-gray-50 border border-gray-200"
+                    isDark 
+                      ? isSpecialTheme
+                        ? cn("bg-slate-900/80 border border", `${gradientColors.accent}-700/50`, "shadow-inner")
+                        : "bg-slate-900/80 border border-slate-700/50 shadow-inner"
+                      : "bg-gray-50 border border-gray-200"
                   )}>
                     <Search className={cn(
                       "absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors",
-                      isDark ? "text-cyan-400" : "text-blue-500"
+                      isDark ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-cyan-400" : "text-blue-500"
                     )} />
                     <Input
                       type="text"
@@ -827,8 +857,8 @@ export default function Documents() {
                     className={cn(
                       "h-15 px-8 text-base font-semibold rounded-2xl shadow-lg transition-all duration-300 hover:-translate-y-0.5",
                       isDark 
-                        ? isPolice 
-                          ? "bg-gradient-to-r from-blue-600 via-cyan-600 to-blue-500 hover:from-blue-500 hover:via-cyan-500 hover:to-blue-400 shadow-cyan-500/30 hover:shadow-cyan-500/50" 
+                        ? isSpecialTheme
+                          ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `hover:from-${gradientColors.accent}-500`, `hover:via-${gradientColors.accent}-400`, `hover:to-${gradientColors.accent}-400`, `shadow-${gradientColors.accent}-500/30`, `hover:shadow-${gradientColors.accent}-500/50`)
                           : "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 shadow-blue-500/30 hover:shadow-blue-500/50"
                         : "bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-400 hover:from-blue-600 hover:via-cyan-600 hover:to-blue-500 shadow-blue-500/30 hover:shadow-blue-500/50"
                     )}

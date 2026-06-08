@@ -14,8 +14,10 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  login(@Body() loginDto: LoginDto, @Req() req: Request) {
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    return this.authService.login(loginDto, ipAddress, userAgent);
   }
 
   @Put('theme')
@@ -37,10 +39,24 @@ export class AuthController {
     return this.authService.getUser(id);
   }
 
+  @Get('users/me')
+  @UseGuards(AuthGuard('jwt'))
+  async getCurrentUser(@Req() req: Request) {
+    const userId = req.user['id'];
+    return this.authService.getUser(userId);
+  }
+
   @Put('users/:id/role')
   @UseGuards(AuthGuard('jwt'))
   async updateUserRole(@Param('id') id: number, @Body() body: { roleId: number | null }) {
     return this.authService.updateUserRole(id, body.roleId);
+  }
+
+  @Put('menu-order')
+  @UseGuards(AuthGuard('jwt'))
+  async updateMenuOrder(@Req() req: Request, @Body() body: { menuOrder: string[] }) {
+    const userId = req.user['id'];
+    return this.authService.updateMenuOrder(userId, body.menuOrder);
   }
 
   @Delete('users/:id')

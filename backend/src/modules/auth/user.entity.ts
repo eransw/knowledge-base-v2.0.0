@@ -25,6 +25,9 @@ export class User {
   @Column({ nullable: true })
   roleId: number;
 
+  @Column({ type: 'text', nullable: true })
+  menuOrder: string;
+
   @ManyToOne(() => Role, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
   role: Role;

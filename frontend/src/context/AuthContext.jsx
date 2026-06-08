@@ -25,6 +25,16 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
+  useEffect(() => {
+    const handleMenuOrderUpdate = (event) => {
+      const { menuOrder } = event.detail
+      setUser(prev => prev ? { ...prev, menuOrder } : prev)
+    }
+    
+    window.addEventListener('user-menu-order-update', handleMenuOrderUpdate)
+    return () => window.removeEventListener('user-menu-order-update', handleMenuOrderUpdate)
+  }, [])
+
   const login = async (username, password) => {
     try {
       const response = await axios.post('/api/auth/login', { username, password }, {
@@ -86,12 +96,32 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+      
+      const response = await axios.get('/api/auth/users/me')
+      const userData = response.data
+      localStorage.setItem('user', JSON.stringify(userData))
+      setUser(userData)
+      
+      if (userData.theme) {
+        const themeEvent = new CustomEvent('user-theme', { detail: { theme: userData.theme } })
+        window.dispatchEvent(themeEvent)
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error)
+    }
+  }
+
   const value = {
     user,
     loading,
     login,
     register,
     logout,
+    refreshUser,
   }
 
   return (
