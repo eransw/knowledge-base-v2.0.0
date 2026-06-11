@@ -1714,20 +1714,21 @@ export default function Documents() {
                       <div className="flex flex-wrap gap-2">
                         {tags.map(tag => {
                           const isSelected = selectedTags.includes(tag.id)
+                          const tagColor = tag.color || '#6366f1'
+                          const bgColor = tagColor + '20'
+                          const borderColor = tagColor + '50'
                           return (
                             <Badge
                               key={tag.id}
                               onClick={() => toggleTag(tag.id)}
-                              className={cn(
-                                "cursor-pointer transition-all duration-300",
-                                isSelected
-                                  ? isDark
-                                    ? "bg-blue-500/30 text-blue-300 border-blue-500/50"
-                                    : "bg-blue-100 text-blue-600 border-blue-300"
-                                  : isDark
-                                    ? "bg-slate-700/50 text-slate-300 border-slate-600/30 hover:bg-slate-600/50"
-                                    : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-                              )}
+                              className="cursor-pointer transition-all duration-300"
+                              style={{
+                                backgroundColor: isSelected ? tagColor : bgColor,
+                                color: isSelected ? '#fff' : tagColor,
+                                borderColor: borderColor,
+                                borderWidth: '1px',
+                                borderStyle: 'solid'
+                              }}
                             >
                               <Tag className="w-3 h-3 mr-1" />
                               {tag.name}
@@ -2275,20 +2276,21 @@ export default function Documents() {
                       <div className="flex flex-wrap gap-2">
                         {tags.map(tag => {
                           const isSelected = editTagIds.includes(tag.id)
+                          const tagColor = tag.color || '#6366f1'
+                          const bgColor = tagColor + '20'
+                          const borderColor = tagColor + '50'
                           return (
                             <Badge
                               key={tag.id}
                               onClick={() => toggleEditTag(tag.id)}
-                              className={cn(
-                                "cursor-pointer transition-all duration-300",
-                                isSelected
-                                  ? isDark
-                                    ? "bg-blue-500/30 text-blue-300 border-blue-500/50"
-                                    : "bg-blue-100 text-blue-600 border-blue-300"
-                                  : isDark
-                                    ? "bg-slate-700/50 text-slate-300 border-slate-600/30 hover:bg-slate-600/50"
-                                    : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-                              )}
+                              className="cursor-pointer transition-all duration-300"
+                              style={{
+                                backgroundColor: isSelected ? tagColor : bgColor,
+                                color: isSelected ? '#fff' : tagColor,
+                                borderColor: borderColor,
+                                borderWidth: '1px',
+                                borderStyle: 'solid'
+                              }}
                             >
                               <Tag className="w-3 h-3 mr-1" />
                               {tag.name}
