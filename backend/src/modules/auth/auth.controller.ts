@@ -52,6 +52,36 @@ export class AuthController {
     return this.authService.updateUserRole(id, body.roleId);
   }
 
+  @Put('users/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateUser(@Param('id') id: number, @Body() body: { email?: string; password?: string; currentPassword?: string }) {
+    return this.authService.updateUserInfo(id, body);
+  }
+
+  @Post('users/:id/reset-password')
+  @UseGuards(AuthGuard('jwt'))
+  async resetPassword(@Param('id') id: number, @Req() req: Request) {
+    const adminId = req.user['id'];
+    const adminUsername = req.user['username'];
+    return this.authService.resetPassword(id, adminId, adminUsername);
+  }
+
+  @Post('users/:id/lock')
+  @UseGuards(AuthGuard('jwt'))
+  async lockUser(@Param('id') id: number, @Req() req: Request) {
+    const adminId = req.user['id'];
+    const adminUsername = req.user['username'];
+    return this.authService.lockUser(id, adminId, adminUsername);
+  }
+
+  @Post('users/:id/unlock')
+  @UseGuards(AuthGuard('jwt'))
+  async unlockUser(@Param('id') id: number, @Req() req: Request) {
+    const adminId = req.user['id'];
+    const adminUsername = req.user['username'];
+    return this.authService.unlockUser(id, adminId, adminUsername);
+  }
+
   @Put('menu-order')
   @UseGuards(AuthGuard('jwt'))
   async updateMenuOrder(@Req() req: Request, @Body() body: { menuOrder: string[] }) {

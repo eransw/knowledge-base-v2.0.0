@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import axios from 'axios'
+import api from '../api/axios'
 
 const AuthContext = createContext()
 
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     try {
+      // 使用原始 axios 而不是配置了拦截器的 api 实例，避免登录失败时被拦截器跳转
       const response = await axios.post('/api/auth/login', { username, password }, {
         headers: {
           'Authorization': undefined
@@ -45,7 +47,7 @@ export function AuthProvider({ children }) {
       const { access_token, user: userData } = response.data
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(userData))
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(userData)
       
       // 如果用户有主题设置，应用主题
@@ -65,13 +67,12 @@ export function AuthProvider({ children }) {
 
   const register = async (username, email, password) => {
     try {
-      const instance = axios.create()
-      delete instance.defaults.headers.common['Authorization']
-      const response = await instance.post('/api/auth/register', { username, email, password })
+      // 使用原始 axios 而不是配置了拦截器的 api 实例
+      const response = await axios.post('/api/auth/register', { username, email, password })
       const { access_token, user: userData } = response.data
       localStorage.setItem('token', access_token)
       localStorage.setItem('user', JSON.stringify(userData))
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
       setUser(userData)
       
       // 如果用户有主题设置（新用户默认是police），应用主题
@@ -92,7 +93,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    delete axios.defaults.headers.common['Authorization']
+    delete api.defaults.headers.common['Authorization']
     setUser(null)
   }
 

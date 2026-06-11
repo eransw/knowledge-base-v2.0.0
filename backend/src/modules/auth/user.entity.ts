@@ -28,6 +28,21 @@ export class User {
   @Column({ type: 'text', nullable: true })
   menuOrder: string;
 
+  @Column({ default: false })
+  isLocked: boolean;
+
+  @Column({ type: 'datetime', nullable: true })
+  lockedAt: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  lockExpireTime: Date;
+
+  @Column({ default: 0 })
+  failedAttempts: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  lastFailedAttempt: Date;
+
   @ManyToOne(() => Role, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
   role: Role;

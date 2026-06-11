@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { User } from './user.entity';
 import { Role } from '../role/role.entity';
 import { JwtStrategy } from './jwt.strategy';
+import { ScheduledTasksService } from './scheduled-tasks.service';
+import { ConfigModule } from '../config/module';
 
 @Module({
   imports: [
@@ -16,8 +18,9 @@ import { JwtStrategy } from './jwt.strategy';
       secret: 'knowledge_base_secret_key',
       signOptions: { expiresIn: '24h' },
     }),
+    ConfigModule,
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, ScheduledTasksService],
   controllers: [AuthController],
   exports: [AuthService, PassportModule],
 })

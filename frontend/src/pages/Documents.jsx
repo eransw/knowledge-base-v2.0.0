@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import axios from 'axios'
-import { Search, Upload, FileText, FolderOpen, Tag, Trash2, Calendar, X, Plus, ChevronRight, ChevronDown, Edit3, Sparkles, Zap, Clock, Eye } from 'lucide-react'
+import axios from '../api/axios'
+import { Search, Upload, FileText, FolderOpen, Tag, Trash2, Calendar, X, Plus, ChevronRight, ChevronDown, Edit3, Sparkles, Zap, Clock, Eye, AlertCircle, LayoutGrid, List } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -54,6 +54,7 @@ export default function Documents() {
   const [categories, setCategories] = useState([])
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [deleteDocumentId, setDeleteDocumentId] = useState(null)
+  const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [tags, setTags] = useState([])
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -69,6 +70,12 @@ export default function Documents() {
   const [uploadDescription, setUploadDescription] = useState('')
   const [selectedTags, setSelectedTags] = useState([])
   const [selectedTag, setSelectedTag] = useState(null)
+  // 批量上传相关状态
+  const [showBatchUploadModal, setShowBatchUploadModal] = useState(false)
+  const [batchUploadFiles, setBatchUploadFiles] = useState([])
+  const [batchUploadPreview, setBatchUploadPreview] = useState([])
+  const [batchUploadCategory, setBatchUploadCategory] = useState(null)
+  const [showBatchUploadConfirm, setShowBatchUploadConfirm] = useState(false)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -90,7 +97,7 @@ export default function Documents() {
 
   useEffect(() => {
     const params = new URLSearchParams()
-    if (selectedCategory) params.set('category', selectedCategory)
+    if (selectedCategory) params.set('categoryId', selectedCategory)
     if (selectedTag) params.set('tag', selectedTag)
     setSearchParams(params)
   }, [selectedCategory, selectedTag, setSearchParams])
@@ -98,7 +105,7 @@ export default function Documents() {
   async function fetchDocuments() {
     try {
       const params = new URLSearchParams()
-      if (selectedCategory) params.set('category', selectedCategory)
+      if (selectedCategory) params.set('categoryId', selectedCategory)
       if (selectedTag) params.set('tag', selectedTag)
       
       const url = params.toString() ? `/api/documents?${params.toString()}` : '/api/documents'
@@ -157,6 +164,8 @@ export default function Documents() {
     try {
       await axios.delete(`/api/documents/${deleteDocumentId}`)
       setDocuments(documents.filter(doc => doc.id !== deleteDocumentId))
+      setAllDocuments(allDocuments.filter(doc => doc.id !== deleteDocumentId))
+      await fetchCategories()
     }
     catch (error) {
       console.error('Delete failed:', error)
@@ -262,6 +271,245 @@ export default function Documents() {
     }
   }
 
+  // 处理批量上传文件，构建预览结构
+  const processBatchFiles = (files) => {
+    // 按路径分组
+    const pathMap = {}
+    files.forEach(file => {
+      const path = file.webkitRelativePath || file.name
+      const parts = path.split('/')
+      const fileName = parts.pop()
+      const directoryPath = parts.join('/')
+      
+      if (!pathMap[directoryPath]) {
+        pathMap[directoryPath] = { categories: [], documents: {} }
+      }
+      
+      // 提取文件名中的数字作为分组标识
+      const match = fileName.match(/(\d+)/)
+      const groupNumber = match ? match[1] : 'default'
+      const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '')
+      const cleanName = nameWithoutExt.replace(/\d+/g, '').trim() || fileName.replace(/\.[^/.]+$/, '')
+      
+      if (!pathMap[directoryPath].documents[groupNumber]) {
+        pathMap[directoryPath].documents[groupNumber] = {
+          name: cleanName,
+          attachments: []
+        }
+      }
+      pathMap[directoryPath].documents[groupNumber].attachments.push({
+        name: fileName,
+        file: file
+      })
+    })
+
+    // 构建预览结构
+    const buildPreview = (path) => {
+      const parts = path.split('/').filter(p => p)
+      if (parts.length === 0) return []
+      
+      const result = []
+      let currentPath = ''
+      
+      parts.forEach((part, index) => {
+        currentPath = index === 0 ? part : `${currentPath}/${part}`
+        const data = pathMap[currentPath]
+        
+        const item = {
+          type: 'category',
+          name: part,
+          children: []
+        }
+        
+        // 如果这个路径下有文档，添加文档
+        if (data && Object.keys(data.documents).length > 0) {
+          Object.values(data.documents).forEach(doc => {
+            item.children.push({
+              type: 'document',
+              name: doc.name,
+              attachments: doc.attachments.map(a => a.name)
+            })
+          })
+        }
+        
+        result.push(item)
+      })
+      
+      return result
+    }
+
+    // 获取所有唯一的目录路径
+    const allPaths = [...new Set(files.map(f => {
+      const path = f.webkitRelativePath || f.name
+      const parts = path.split('/')
+      parts.pop()
+      return parts.join('/')
+    }))]
+
+    // 按路径层级分组
+    const preview = []
+    const processedPaths = new Set()
+
+    allPaths.forEach(path => {
+      if (processedPaths.has(path)) return
+      
+      const parts = path.split('/').filter(p => p)
+      if (parts.length === 0) {
+        // 根目录文件
+        const data = pathMap['']
+        if (data && Object.keys(data.documents).length > 0) {
+          Object.values(data.documents).forEach(doc => {
+            preview.push({
+              type: 'document',
+              name: doc.name,
+              attachments: doc.attachments.map(a => a.name)
+            })
+          })
+        }
+        processedPaths.add(path)
+        return
+      }
+
+      // 找到最顶层的路径
+      let topPath = parts[0]
+      let fullTopPath = topPath
+      
+      for (let i = 1; i < parts.length; i++) {
+        const potentialPath = parts.slice(0, i).join('/')
+        if (allPaths.some(p => p.startsWith(potentialPath + '/') && p !== potentialPath)) {
+          fullTopPath = potentialPath
+        }
+      }
+
+      if (processedPaths.has(fullTopPath)) return
+
+      // 构建完整的分类树
+      const categoryData = pathMap[fullTopPath] || { categories: [], documents: {} }
+      const children = []
+
+      // 添加当前路径下的文档
+      if (Object.keys(categoryData.documents).length > 0) {
+        Object.values(categoryData.documents).forEach(doc => {
+          children.push({
+            type: 'document',
+            name: doc.name,
+            attachments: doc.attachments.map(a => a.name)
+          })
+        })
+      }
+
+      // 查找子目录并按名称分组，避免重复
+      const subPaths = allPaths.filter(p => p.startsWith(fullTopPath + '/') && p !== fullTopPath)
+      const subCategories = {}
+      
+      subPaths.forEach(subPath => {
+        const relativePath = subPath.substring(fullTopPath.length + 1)
+        const subParts = relativePath.split('/')
+        const subCategoryName = subParts[0]
+        const subData = pathMap[subPath] || { documents: {} }
+        
+        // 如果这个子分类还没有被处理
+        if (!subCategories[subCategoryName]) {
+          subCategories[subCategoryName] = {
+            type: 'category',
+            name: subCategoryName,
+            children: []
+          }
+        }
+        
+        // 添加这个子路径下的文档
+        if (Object.keys(subData.documents).length > 0) {
+          Object.values(subData.documents).forEach(doc => {
+            // 检查文档是否已存在
+            const exists = subCategories[subCategoryName].children.some(
+              child => child.type === 'document' && child.name === doc.name
+            )
+            if (!exists) {
+              subCategories[subCategoryName].children.push({
+                type: 'document',
+                name: doc.name,
+                attachments: doc.attachments.map(a => a.name)
+              })
+            }
+          })
+        }
+        processedPaths.add(subPath)
+      })
+      
+      // 将去重后的子分类添加到 children
+      Object.values(subCategories).forEach(subCat => {
+        children.push(subCat)
+      })
+
+      preview.push({
+        type: 'category',
+        name: topPath,
+        children: children
+      })
+      
+      processedPaths.add(fullTopPath)
+    })
+
+    setBatchUploadPreview(preview)
+  }
+
+  // 执行批量上传
+  const handleBatchUpload = async () => {
+    if (batchUploadFiles.length === 0) return
+    
+    const formData = new FormData()
+    
+    batchUploadFiles.forEach((file, index) => {
+      formData.append('files', file)
+      formData.append(`paths[${index}]`, file.webkitRelativePath || file.name)
+    })
+    
+    if (batchUploadCategory) {
+      formData.append('parentCategoryId', batchUploadCategory)
+    }
+    
+    const token = localStorage.getItem('token')
+    console.log('FormData entries:', [...formData.entries()])
+    console.log('Token:', token ? 'Present' : 'Missing')
+    
+    try {
+      console.log('Starting batch upload...')
+      const response = await axios.post('/api/documents/batch-upload', formData, {
+        headers: { 
+          'Authorization': `Bearer ${token}`
+          // 不要手动设置 Content-Type，让浏览器自动处理
+        },
+      })
+      console.log('Batch upload successful! Response:', response.data)
+      setShowBatchUploadModal(false)
+      setBatchUploadFiles([])
+      setBatchUploadPreview([])
+      setBatchUploadCategory(null)
+      console.log('Refreshing documents...')
+      await fetchDocuments()
+      console.log('Documents refreshed')
+      await fetchCategories()
+      console.log('Categories refreshed')
+    } catch (error) {
+      console.error('Batch upload failed:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers
+      })
+      if (error.response) {
+        console.error('Error response data:', JSON.stringify(error.response.data, null, 2))
+      }
+      if (error.request) {
+        console.error('Error request:', error.request)
+      }
+      alert(`批量上传失败: ${error.response?.data?.message || error.message}`)
+    }
+  }
+
   const [expandedCategories, setExpandedCategories] = useState([])
 
   const toggleCategory = (categoryId) => {
@@ -349,13 +597,11 @@ export default function Documents() {
             "w-full text-left px-3 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 group",
             selectedCategory === category.id
               ? isDark 
-                ? isSpecialTheme
-                  ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-600/20`, `to-${gradientColors.accent}-500/20`, `text-${gradientColors.accent}-200`, `shadow-lg`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
-                : 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-purple-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20'
-              : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
-            : isDark 
-              ? 'hover:bg-slate-700/60 text-slate-200 hover:text-white hover:border-slate-600/30' 
-              : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900 hover:border-gray-200/50'
+                ? cn('bg-gradient-to-r', cardColors.bgFrom, cardColors.bgTo, cardColors.text, 'shadow-lg', cardColors.shadow, `border ${cardColors.border}`)
+                : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
+              : isDark 
+                ? 'hover:bg-slate-700/60 text-slate-200 hover:text-white hover:border-slate-600/30 border border-transparent' 
+                : 'hover:bg-gray-100 text-gray-700 hover:text-gray-900 hover:border-gray-200/50 border border-transparent'
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
         >
@@ -419,9 +665,6 @@ export default function Documents() {
   }
 
   const filteredDocuments = documents.filter(doc => {
-    if (selectedCategory && doc.category?.id !== selectedCategory) {
-      return false
-    }
     if (selectedTags.length > 0) {
       const docTagIds = doc.tags?.map(tag => tag.id) || []
       return selectedTags.some(tagId => docTagIds.includes(tagId))
@@ -604,20 +847,40 @@ export default function Documents() {
               </div>
             </div>
           </div>
-          <Button 
-            onClick={() => setShowUploadModal(true)} 
-            className={cn(
-              "h-16 px-10 text-base font-semibold rounded-2xl shadow-xl transition-all duration-300 hover:-translate-y-1 active:translate-y-0",
-              isDark 
-                ? isSpecialTheme 
-                  ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`, `hover:shadow-${gradientColors.accent}-500/50`)
-                  : "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 shadow-blue-500/30 hover:shadow-blue-500/50"
-                : "bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-400 hover:from-blue-600 hover:via-cyan-600 hover:to-blue-500 shadow-blue-500/30 hover:shadow-blue-500/50"
-            )}
-          >
-            <Upload className="w-5 h-5 mr-2.5" />
-            上传文档
-          </Button>
+          <div className="flex gap-3">
+            <Button 
+              onClick={() => setShowUploadModal(true)} 
+              variant="outline"
+              className={cn(
+                "h-12 px-6 text-base font-semibold rounded-xl shadow-md transition-all duration-300 border-2",
+                isDark 
+                  ? isSpecialTheme
+                    ? cn(`border-${gradientColors.accent}-500/50 text-${gradientColors.accent}-200 hover:bg-${gradientColors.accent}-500/20 hover:border-${gradientColors.accent}-500/70`)
+                    : "border-blue-500/50 text-blue-200 hover:bg-blue-500/20 hover:border-blue-500/70"
+                  : "border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400"
+              )}
+            >
+              <Upload className="w-5 h-5 mr-2" />
+              上传文档
+            </Button>
+            <Button 
+              onClick={() => {
+                setBatchUploadCategory(selectedCategory || null)
+                setShowBatchUploadModal(true)
+              }} 
+              className={cn(
+                "h-12 px-8 text-base font-semibold rounded-xl shadow-lg transition-all duration-300 scale-105",
+                isDark 
+                  ? isSpecialTheme 
+                    ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/40`, `hover:shadow-${gradientColors.accent}-500/60`, "hover:scale-107")
+                    : "bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-500 hover:via-teal-500 hover:to-green-500 shadow-emerald-500/40 hover:shadow-emerald-500/60 hover:scale-107"
+                  : "bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 hover:from-emerald-600 hover:via-teal-600 hover:to-green-600 shadow-emerald-500/40 hover:shadow-emerald-500/60 hover:scale-107"
+              )}
+            >
+              <FolderOpen className="w-5 h-5 mr-2" />
+              批量上传
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-6 lg:gap-8">
@@ -637,11 +900,11 @@ export default function Documents() {
                 "pb-4 px-6",
                 isDark 
                   ? isSpecialTheme
-                    ? cn("border-b", cardColors.border, "bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
-                    : "border-b border-slate-600/40 bg-gradient-to-r from-slate-700/60 to-transparent"
-                  : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+                    ? cn("bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
+                    : "bg-gradient-to-r from-slate-700/60 to-transparent"
+                  : "bg-gradient-to-r from-gray-50 to-transparent"
               )}>
-                <CardTitle className={cn("flex items-center gap-3 text-base font-semibold", isDark ? cardColors.text : "text-blue-600")}>
+                <CardTitle className={cn("flex items-center gap-3 text-base font-semibold", isDark ? (isSpecialTheme ? cardColors.text : "text-blue-200") : "text-blue-600")}>
                   <div className={cn(
                     "w-9 h-9 rounded-xl flex items-center justify-center",
                     isDark 
@@ -666,9 +929,7 @@ export default function Documents() {
                     "w-full text-left px-4 py-3.5 rounded-xl transition-all duration-300 flex items-center gap-3",
                     !selectedCategory && !selectedTag
                       ? isDark 
-                        ? isSpecialTheme
-                          ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-600/20`, `to-${gradientColors.accent}-500/20`, `text-${gradientColors.accent}-200`, `shadow-lg`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
-                          : 'bg-gradient-to-r from-blue-500/30 via-blue-600/20 to-indigo-500/20 text-blue-200 shadow-lg shadow-blue-500/15 border border-blue-500/20'
+                        ? cn('bg-gradient-to-r', cardColors.bgFrom, cardColors.bgTo, cardColors.text, 'shadow-lg', cardColors.shadow, `border ${cardColors.border}`)
                         : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
                       : isDark 
                         ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
@@ -679,7 +940,7 @@ export default function Documents() {
                     "w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300",
                     !selectedCategory && !selectedTag
                       ? isDark 
-                        ? isSpecialTheme ? `bg-${gradientColors.accent}-500/30` : "bg-blue-500/30"
+                        ? cn("bg-gradient-to-br", cardColors.bgFrom.replace('800', '500').replace('95', '30').replace('90', '20'), cardColors.bgTo.replace('95', '500').replace('90', '20').replace('800', '600'))
                         : "bg-blue-100"
                       : isDark ? "bg-slate-700/40" : "bg-gray-100"
                   )}>
@@ -687,7 +948,7 @@ export default function Documents() {
                       "w-4.5 h-4.5",
                       !selectedCategory && !selectedTag
                         ? isDark 
-                          ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-blue-400"
+                          ? cardColors.text.replace('300', '400')
                           : "text-blue-500"
                         : isDark ? "text-slate-400" : "text-gray-500"
                     )} />
@@ -697,7 +958,7 @@ export default function Documents() {
                     "text-xs px-3 py-1.5 rounded-full font-medium",
                     !selectedCategory && !selectedTag
                       ? isDark 
-                        ? isSpecialTheme ? cn(`bg-${gradientColors.accent}-500/30`, `text-${gradientColors.accent}-300`) : "bg-blue-500/30 text-blue-300"
+                        ? cn("bg-gradient-to-r", cardColors.bgFrom.replace('800', '500').replace('95', '30').replace('90', '20'), cardColors.bgTo.replace('95', '500').replace('90', '20').replace('800', '600'), cardColors.text.replace('300', '200'))
                         : "bg-blue-100 text-blue-600"
                       : isDark ? "bg-slate-700/50 text-slate-400" : "bg-gray-100 text-gray-500"
                   )}>{allDocuments.length}</span>
@@ -724,11 +985,11 @@ export default function Documents() {
                 "pb-4 px-6",
                 isDark 
                   ? isSpecialTheme
-                    ? cn("border-b", cardColors.border, "bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
-                    : "border-b border-slate-600/40 bg-gradient-to-r from-slate-700/60 to-transparent"
-                  : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+                    ? cn("bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
+                    : "bg-gradient-to-r from-slate-700/60 to-transparent"
+                  : "bg-gradient-to-r from-gray-50 to-transparent"
               )}>
-                <CardTitle className={cn("flex items-center gap-3 text-base font-semibold", isDark ? cardColors.text : "text-blue-600")}>
+                <CardTitle className={cn("flex items-center gap-3 text-base font-semibold", isDark ? (isSpecialTheme ? cardColors.text : "text-cyan-200") : "text-blue-600")}>
                   <div className={cn(
                     "w-9 h-9 rounded-xl flex items-center justify-center",
                     isDark 
@@ -758,13 +1019,11 @@ export default function Documents() {
                           "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 flex items-center gap-2",
                           isSelected
                             ? isDark 
-                              ? isSpecialTheme
-                                ? cn('bg-gradient-to-r', `from-${gradientColors.accent}-500/30`, `via-${gradientColors.accent}-400/20`, `to-${gradientColors.accent}-500/30`, `text-${gradientColors.accent}-200`, `shadow-md`, `shadow-${gradientColors.accent}-500/15`, `border border-${gradientColors.accent}-500/20`)
-                              : 'bg-gradient-to-r from-cyan-500/30 via-blue-500/20 to-cyan-500/30 text-cyan-200 shadow-md shadow-cyan-500/15 border border-cyan-500/20' 
-                            : 'bg-gradient-to-r from-blue-50 via-cyan-50 to-blue-50 text-blue-700 shadow-md border border-blue-200/50'
-                          : isDark 
-                            ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
-                            : 'hover:bg-gray-100 text-gray-700'
+                              ? cn('bg-gradient-to-r', cardColors.bgFrom, cardColors.bgTo, cardColors.text, 'shadow-md', cardColors.shadow, `border ${cardColors.border}`)
+                              : 'bg-gradient-to-r from-blue-50 via-cyan-50 to-blue-50 text-blue-700 shadow-md border border-blue-200/50'
+                            : isDark 
+                              ? 'hover:bg-slate-700/60 text-slate-300 hover:text-slate-100' 
+                              : 'hover:bg-gray-100 text-gray-700'
                         )}
                       >
                         <div
@@ -775,7 +1034,7 @@ export default function Documents() {
                         <span className={cn(
                           "text-xs px-2.5 py-1 rounded-full",
                           isSelected
-                            ? isDark ? "bg-purple-500/30 text-purple-300" : "bg-purple-100 text-purple-600"
+                            ? isDark ? cn("bg-gradient-to-r", cardColors.bgFrom.replace('800', '500').replace('95', '30').replace('90', '20'), cardColors.bgTo.replace('95', '500').replace('90', '20').replace('800', '600'), cardColors.text.replace('300', '200')) : "bg-purple-100 text-purple-600"
                             : isDark ? "bg-slate-700/50 text-slate-400" : "bg-gray-100 text-gray-500"
                         )}>{tagCount}</span>
                       </button>
@@ -799,7 +1058,19 @@ export default function Documents() {
                 isDark 
                   ? isPolice 
                     ? "bg-gradient-to-br from-[#1a2f50]/90 via-[#0f1f3d]/85 to-[#1a2f50]/90 backdrop-blur-xl border border-cyan-500/30 shadow-cyan-500/20 shadow-black/40"
-                    : "bg-slate-800/90 backdrop-blur-lg border border-slate-700/40 shadow-black/40"
+                  : isCyber
+                    ? "bg-gradient-to-br from-[#18181b]/90 via-[#27272a]/85 to-[#18181b]/90 backdrop-blur-xl border border-red-500/30 shadow-red-500/20 shadow-black/40"
+                  : isNight
+                    ? "bg-gradient-to-br from-[#1a1333]/90 via-[#251d47]/85 to-[#1a1333]/90 backdrop-blur-xl border border-violet-500/30 shadow-violet-500/20 shadow-black/40"
+                  : isOrange
+                    ? "bg-gradient-to-br from-[#2c1810]/90 via-[#3d2012]/85 to-[#2c1810]/90 backdrop-blur-xl border border-orange-500/30 shadow-orange-500/20 shadow-black/40"
+                  : isGreen
+                    ? "bg-gradient-to-br from-[#102c18]/90 via-[#123d20]/85 to-[#102c18]/90 backdrop-blur-xl border border-green-500/30 shadow-green-500/20 shadow-black/40"
+                  : isPink
+                    ? "bg-gradient-to-br from-[#2c1020]/90 via-[#3d1225]/85 to-[#2c1020]/90 backdrop-blur-xl border border-pink-500/30 shadow-pink-500/20 shadow-black/40"
+                  : isPurple
+                    ? "bg-gradient-to-br from-[#1e1b4b]/90 via-[#312e81]/85 to-[#1e1b4b]/90 backdrop-blur-xl border border-purple-500/30 shadow-purple-500/20 shadow-black/40"
+                  : "bg-slate-800/90 backdrop-blur-lg border border-slate-700/40 shadow-black/40"
                   : "bg-white/95 backdrop-blur-lg border border-gray-100 shadow-gray-200/80"
               )}
               style={{ marginTop: '3px' }}
@@ -807,25 +1078,59 @@ export default function Documents() {
               <CardHeader className={cn(
                 "pb-4 px-6",
                 isDark 
-                  ? isSpecialTheme
-                    ? cn("border-b", cardColors.border, "bg-gradient-to-r", `from-${gradientColors.accent}-900/40`, "to-transparent")
-                    : "border-b border-slate-600/40 bg-gradient-to-r from-slate-700/60 to-transparent"
-                  : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+                  ? isPolice
+                    ? "bg-gradient-to-r from-cyan-900/40 to-transparent"
+                  : isCyber
+                    ? "bg-gradient-to-r from-red-900/40 to-transparent"
+                  : isNight
+                    ? "bg-gradient-to-r from-violet-900/40 to-transparent"
+                  : isOrange
+                    ? "bg-gradient-to-r from-orange-900/40 to-transparent"
+                  : isGreen
+                    ? "bg-gradient-to-r from-green-900/40 to-transparent"
+                  : isPink
+                    ? "bg-gradient-to-r from-pink-900/40 to-transparent"
+                  : isPurple
+                    ? "bg-gradient-to-r from-purple-900/40 to-transparent"
+                  : "bg-gradient-to-r from-slate-700/60 to-transparent"
+                  : "bg-gradient-to-r from-gray-50 to-transparent"
               )}>
               </CardHeader>
               <CardContent className="pt-4 px-6">
                 <div className="flex flex-col sm:flex-row gap-4">
+                  {/* 搜索框 */}
                   <div className={cn(
-                    "flex-1 relative rounded-2xl overflow-hidden",
+                    "flex-1 relative rounded-2xl overflow-hidden transition-all duration-300",
                     isDark 
-                      ? isSpecialTheme
-                        ? cn("bg-slate-900/80 border border", `${gradientColors.accent}-700/50`, "shadow-inner")
-                        : "bg-slate-900/80 border border-slate-700/50 shadow-inner"
-                      : "bg-gray-50 border border-gray-200"
+                      ? isPolice
+                        ? "bg-[#1a2f50]/80 border-2 border-cyan-500/30 shadow-inner focus-within:border-cyan-500/50 focus-within:shadow-cyan-500/20"
+                      : isCyber
+                        ? "bg-[#18181b]/80 border-2 border-red-500/30 shadow-inner focus-within:border-red-500/50 focus-within:shadow-red-500/20"
+                      : isNight
+                        ? "bg-[#1a1333]/80 border-2 border-violet-500/30 shadow-inner focus-within:border-violet-500/50 focus-within:shadow-violet-500/20"
+                      : isOrange
+                        ? "bg-[#2c1810]/80 border-2 border-orange-500/30 shadow-inner focus-within:border-orange-500/50 focus-within:shadow-orange-500/20"
+                      : isGreen
+                        ? "bg-[#102c18]/80 border-2 border-green-500/30 shadow-inner focus-within:border-green-500/50 focus-within:shadow-green-500/20"
+                      : isPink
+                        ? "bg-[#2c1020]/80 border-2 border-pink-500/30 shadow-inner focus-within:border-pink-500/50 focus-within:shadow-pink-500/20"
+                      : isPurple
+                        ? "bg-[#1e1b4b]/80 border-2 border-purple-500/30 shadow-inner focus-within:border-purple-500/50 focus-within:shadow-purple-500/20"
+                      : "bg-slate-900/80 border-2 border-blue-500/30 shadow-inner focus-within:border-blue-500/50 focus-within:shadow-blue-500/20"
+                      : "bg-white border-2 border-blue-300 shadow-inner focus-within:border-blue-500 focus-within:shadow-blue-500/20"
                   )}>
                     <Search className={cn(
                       "absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors",
-                      isDark ? isSpecialTheme ? `text-${gradientColors.accent}-400` : "text-cyan-400" : "text-blue-500"
+                      isDark 
+                        ? isPolice ? "text-cyan-400"
+                        : isCyber ? "text-red-400"
+                        : isNight ? "text-violet-400"
+                        : isOrange ? "text-orange-400"
+                        : isGreen ? "text-green-400"
+                        : isPink ? "text-pink-400"
+                        : isPurple ? "text-purple-400"
+                        : "text-blue-400"
+                        : "text-blue-500"
                     )} />
                     <Input
                       type="text"
@@ -833,7 +1138,7 @@ export default function Documents() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                       className={cn(
-                        "pl-14 pr-20 py-4 h-15 text-base border-0 focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                        "pl-14 pr-20 py-4 h-15 text-base border-0 focus-visible:ring-0",
                         isDark 
                           ? "bg-transparent text-slate-100 placeholder:text-slate-500" 
                           : "bg-transparent text-gray-900 placeholder:text-gray-400"
@@ -845,7 +1150,16 @@ export default function Documents() {
                         onClick={() => setSearchTerm('')}
                         className={cn(
                           "absolute right-14 top-1/2 transform -translate-y-1/2 p-1.5 rounded-full transition-all duration-200",
-                          isDark ? "hover:bg-slate-700/50 text-slate-400 hover:text-slate-200" : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                          isDark 
+                            ? isPolice ? "hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300"
+                            : isCyber ? "hover:bg-red-500/20 text-red-400 hover:text-red-300"
+                            : isNight ? "hover:bg-violet-500/20 text-violet-400 hover:text-violet-300"
+                            : isOrange ? "hover:bg-orange-500/20 text-orange-400 hover:text-orange-300"
+                            : isGreen ? "hover:bg-green-500/20 text-green-400 hover:text-green-300"
+                            : isPink ? "hover:bg-pink-500/20 text-pink-400 hover:text-pink-300"
+                            : isPurple ? "hover:bg-purple-500/20 text-purple-400 hover:text-purple-300"
+                            : "hover:bg-slate-700/50 text-slate-400 hover:text-slate-200"
+                            : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
                         )}
                       >
                         <X className="w-5 h-5" />
@@ -859,163 +1173,394 @@ export default function Documents() {
                       isDark 
                         ? isSpecialTheme
                           ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `hover:from-${gradientColors.accent}-500`, `hover:via-${gradientColors.accent}-400`, `hover:to-${gradientColors.accent}-400`, `shadow-${gradientColors.accent}-500/30`, `hover:shadow-${gradientColors.accent}-500/50`)
-                          : "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 shadow-blue-500/30 hover:shadow-blue-500/50"
+                        : "bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 shadow-blue-500/30 hover:shadow-blue-500/50"
                         : "bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-400 hover:from-blue-600 hover:via-cyan-600 hover:to-blue-500 shadow-blue-500/30 hover:shadow-blue-500/50"
                     )}
                   >
                     <Search className="w-5 h-5 mr-2" />
                     搜索
                   </Button>
+                  
+                  {/* 视图切换按钮 */}
+                  <div className={cn(
+                    "flex items-center gap-2 p-1.5 rounded-xl",
+                    isDark 
+                      ? isSpecialTheme
+                        ? `bg-${gradientColors.accent}-500/20 border border-${gradientColors.accent}-500/30`
+                        : "bg-slate-700/50 border border-slate-600/50"
+                      : "bg-gray-100 border border-gray-200"
+                  )}>
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={cn(
+                        "p-2.5 rounded-lg transition-all duration-200",
+                        viewMode === 'grid'
+                          ? isDark
+                            ? isSpecialTheme
+                              ? `bg-${gradientColors.accent}-500/40 text-${gradientColors.accent}-200 shadow-lg shadow-${gradientColors.accent}-500/30`
+                              : "bg-blue-500/40 text-blue-200 shadow-lg shadow-blue-500/30"
+                            : "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+                          : isDark
+                            ? "text-slate-400 hover:text-slate-200 hover:bg-slate-600/30"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                      )}
+                      title="卡片视图"
+                    >
+                      <LayoutGrid className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={cn(
+                        "p-2.5 rounded-lg transition-all duration-200",
+                        viewMode === 'list'
+                          ? isDark
+                            ? isSpecialTheme
+                              ? `bg-${gradientColors.accent}-500/40 text-${gradientColors.accent}-200 shadow-lg shadow-${gradientColors.accent}-500/30`
+                              : "bg-blue-500/40 text-blue-200 shadow-lg shadow-blue-500/30"
+                            : "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+                          : isDark
+                            ? "text-slate-400 hover:text-slate-200 hover:bg-slate-600/30"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"
+                      )}
+                      title="列表视图"
+                    >
+                      <List className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* 文档卡片网格 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-8">
-              {filteredDocuments.map(document => (
-                <Card
-                  key={document.id}
-                  className={cn(
-                    "group cursor-pointer transition-all duration-500 overflow-hidden rounded-2xl",
-                    "hover:-translate-y-2 hover:shadow-2xl",
-                    cardClass(isDark, '', currentTheme),
-                    isDark 
-                      ? isPolice
-                        ? 'bg-gradient-to-br from-[#1a2f50]/95 via-[#0f1f3d]/90 to-[#1a2f50]/95 backdrop-blur-xl border border-cyan-500/30 hover:border-cyan-400/50 shadow-xl shadow-cyan-500/15 shadow-black/40 hover:shadow-cyan-500/30'
-                        : 'bg-gradient-to-br from-slate-800/95 via-slate-700/90 to-slate-800/95 backdrop-blur-lg border border-slate-600/40 hover:border-cyan-400/50 shadow-xl shadow-black/40 hover:shadow-cyan-500/30'
-                      : 'bg-white/95 backdrop-blur-md border border-gray-100 hover:border-cyan-200 shadow-lg shadow-gray-100/50 hover:shadow-cyan-100/40'
-                  )}
-                  onClick={() => navigate(`/documents/${document.id}`)}
-                >
-                  <CardHeader className="pb-4 px-5">
-                    <div className="flex items-start gap-4">
-                      {/* 文件图标 */}
-                      <div className={cn(
-                        "w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all duration-500 group-hover:scale-110 group-hover:rotate-3",
-                        fileIcon(document.attachments)
-                      )}>
-                        <FileText className="w-7 h-7" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className={cn(
-                          "text-lg font-bold truncate transition-all duration-300 line-clamp-2",
-                          textClass('primary', isDark, currentTheme),
-                          isDark ? "group-hover:text-blue-400" : "group-hover:text-blue-600"
+            {/* 文档列表/卡片 */}
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-8">
+                {filteredDocuments.map(document => (
+                  <Card
+                    key={document.id}
+                    className={cn(
+                      "group cursor-pointer transition-all duration-500 overflow-hidden rounded-2xl",
+                      "hover:-translate-y-2 hover:shadow-2xl",
+                      cardClass(isDark, '', currentTheme),
+                      isDark 
+                        ? isPolice
+                          ? 'bg-gradient-to-br from-[#1a2f50]/95 via-[#0f1f3d]/90 to-[#1a2f50]/95 backdrop-blur-xl border border-cyan-500/30 hover:border-cyan-400/50 shadow-xl shadow-cyan-500/15 shadow-black/40 hover:shadow-cyan-500/30'
+                        : isCyber
+                          ? 'bg-gradient-to-br from-[#18181b]/95 via-[#27272a]/90 to-[#18181b]/95 backdrop-blur-lg border border-red-500/30 hover:border-red-400/50 shadow-xl shadow-red-500/15 shadow-black/40 hover:shadow-red-500/30'
+                        : isNight
+                          ? 'bg-gradient-to-br from-[#1a1333]/95 via-[#251d47]/90 to-[#1a1333]/95 backdrop-blur-lg border border-violet-500/30 hover:border-violet-400/50 shadow-xl shadow-violet-500/15 shadow-black/40 hover:shadow-violet-500/30'
+                        : isOrange
+                          ? 'bg-gradient-to-br from-[#2c1810]/95 via-[#3d2012]/90 to-[#2c1810]/95 backdrop-blur-lg border border-orange-500/30 hover:border-orange-400/50 shadow-xl shadow-orange-500/15 shadow-black/40 hover:shadow-orange-500/30'
+                        : isGreen
+                          ? 'bg-gradient-to-br from-[#102c18]/95 via-[#123d20]/90 to-[#102c18]/95 backdrop-blur-lg border border-green-500/30 hover:border-green-400/50 shadow-xl shadow-green-500/15 shadow-black/40 hover:shadow-green-500/30'
+                        : isPink
+                          ? 'bg-gradient-to-br from-[#2c1020]/95 via-[#3d1225]/90 to-[#2c1020]/95 backdrop-blur-lg border border-pink-500/30 hover:border-pink-400/50 shadow-xl shadow-pink-500/15 shadow-black/40 hover:shadow-pink-500/30'
+                        : isPurple
+                          ? 'bg-gradient-to-br from-[#1a1333]/95 via-[#251d47]/90 to-[#1a1333]/95 backdrop-blur-lg border border-purple-500/30 hover:border-purple-400/50 shadow-xl shadow-purple-500/15 shadow-black/40 hover:shadow-purple-500/30'
+                        : 'bg-gradient-to-br from-slate-800/95 via-slate-700/90 to-slate-800/95 backdrop-blur-lg border border-slate-600/40 hover:border-blue-400/50 shadow-xl shadow-black/40 hover:shadow-blue-500/30'
+                        : 'bg-white/95 backdrop-blur-md border border-gray-100 hover:border-blue-200 shadow-lg shadow-gray-100/50 hover:shadow-blue-100/40'
+                    )}
+                    onClick={() => navigate(`/documents/${document.id}`)}
+                  >
+                    <CardHeader className="pb-4 px-5">
+                      <div className="flex items-start gap-4">
+                        {/* 文件图标 */}
+                        <div className={cn(
+                          "w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all duration-500 group-hover:scale-110 group-hover:rotate-3",
+                          fileIcon(document.attachments)
                         )}>
-                          {document.title}
-                        </CardTitle>
-                        <CardDescription className={cn("mt-2 line-clamp-2 text-sm", textClass('muted', isDark, currentTheme))}>
-                          {document.content?.substring(0, 100) || document.description?.substring(0, 100) || '暂无内容'}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-0 px-5">
-                    {/* 元信息 */}
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-4">
-                        {document.category && (
-                          <span className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full",
+                          <FileText className="w-7 h-7" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className={cn(
+                            "font-semibold text-base leading-tight line-clamp-2 transition-colors duration-300",
                             isDark 
-                              ? "bg-blue-500/20 border border-blue-500/30" 
-                              : "bg-blue-50 border border-blue-100"
+                              ? isCyber 
+                                ? "text-white group-hover:text-red-300"
+                                : isNight
+                                  ? "text-white group-hover:text-violet-300"
+                                  : "text-white group-hover:text-cyan-300" 
+                              : "text-gray-800 group-hover:text-blue-600"
                           )}>
-                            <FolderOpen className={cn("w-3.5 h-3.5", isDark ? "text-blue-400" : "text-blue-500")} />
-                            <span className={cn(isDark ? "text-blue-200" : "text-blue-700")}>{document.category.name}</span>
+                            {document.title}
+                          </h3>
+                          {document.category && (
+                            <div className={cn(
+                              "mt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium",
+                              isDark 
+                                ? isCyber
+                                  ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                                : isNight
+                                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                                  : "bg-blue-500/20 text-blue-300 border border-blue-500/30" 
+                                : "bg-blue-50 text-blue-600 border border-blue-200"
+                            )}>
+                              <FolderOpen className="w-3 h-3" />
+                              <span className={cn(
+                                isDark 
+                                  ? isCyber
+                                    ? "text-red-200"
+                                  : isNight
+                                    ? "text-violet-200"
+                                    : "text-blue-200" 
+                                  : "text-blue-700")}>{document.category.name}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5 relative">
+                      <p className={cn(
+                        "text-sm line-clamp-2 mb-4",
+                        isDark ? "text-slate-400" : "text-gray-500"
+                      )}>
+                        {document.description || '暂无内容'}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <span className={cn("flex items-center gap-1.5", isDark ? "text-slate-300" : "text-gray-500")}>
+                            <Calendar className="w-3.5 h-3.5" />
+                            {new Date(document.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
                           </span>
+                          <span className={cn("flex items-center gap-1.5", isDark ? "text-slate-300" : "text-gray-500")}>
+                            <Eye className="w-3.5 h-3.5" />
+                            {document.viewCount || 0}
+                          </span>
+                        </div>
+                        
+                        {/* 标签 */}
+                        {document.tags && document.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {document.tags.slice(0, 3).map(tag => (
+                              <Badge 
+                                key={tag.id} 
+                                className={cn(
+                                  "gap-1.5 px-3 py-1.5 text-xs font-medium transition-all duration-300 group-hover:scale-105",
+                                  isDark 
+                                    ? isCyber
+                                      ? "bg-gradient-to-r from-red-500/20 to-rose-500/20 border border-red-500/30 text-red-200"
+                                    : isNight
+                                      ? "bg-gradient-to-r from-violet-500/20 to-purple-500/20 border border-violet-500/30 text-violet-200"
+                                      : "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-200" 
+                                    : "bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-100 text-cyan-700 hover:from-cyan-100 hover:to-blue-100"
+                                )}
+                              >
+                                <Tag className="w-3 h-3" />
+                                {tag.name}
+                              </Badge>
+                            ))}
+                            {document.tags.length > 3 && (
+                              <Badge className={cn(
+                                "px-3 py-1.5 text-xs font-medium",
+                                isDark 
+                                  ? "bg-slate-700/50 text-slate-300 border border-slate-600/30" 
+                                  : "bg-gray-100 text-gray-600"
+                              )}>+{document.tags.length - 3}</Badge>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className={cn("flex items-center gap-1.5", isDark ? "text-slate-300" : "text-gray-500")}>
-                          <Calendar className="w-3.5 h-3.5" />
-                          {new Date(document.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
-                        </span>
-                        <span className={cn("flex items-center gap-1.5", isDark ? "text-slate-300" : "text-gray-500")}>
-                          <Eye className="w-3.5 h-3.5" />
-                          {document.viewCount || 0}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* 标签 */}
-                    {document.tags && document.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {document.tags.slice(0, 3).map(tag => (
-                          <Badge 
-                            key={tag.id} 
+                      
+                      {/* 虚线间隔线 */}
+                      <div className="border-t border-dashed my-4" style={{
+                        borderColor: isDark 
+                          ? isPolice ? 'rgba(6, 182, 212, 0.4)'      // 公安蓝 - 青色
+                            : isNight ? 'rgba(167, 139, 250, 0.4)'   // 暗夜紫 - 紫色
+                            : isCyber ? 'rgba(239, 68, 68, 0.4)'     // 极客黑 - 红色
+                            : isPurple ? 'rgba(168, 85, 247, 0.4)'   // 优雅紫 - 紫色
+                            : isGreen ? 'rgba(34, 197, 94, 0.4)'     // 绿色主题
+                            : isOrange ? 'rgba(249, 115, 22, 0.4)'   // 橙色主题
+                            : isPink ? 'rgba(236, 72, 153, 0.4)'     // 粉色主题
+                            : 'rgba(148, 163, 184, 0.4)'             // 默认深色
+                          : 'rgba(229, 231, 235, 1)'                 // 浅色主题
+                      }} />
+                      
+                      {/* 操作按钮 */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditClick(document)
+                            }}
                             className={cn(
-                              "gap-1.5 px-3 py-1.5 text-xs font-medium transition-all duration-300 group-hover:scale-105",
+                              "p-2 rounded-lg transition-all duration-200",
                               isDark 
-                                ? "bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-200" 
-                                : "bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-100 text-cyan-700 hover:from-cyan-100 hover:to-blue-100"
+                                ? isCyber
+                                  ? "hover:bg-red-500/20 text-slate-300 hover:text-red-400"
+                                : isNight
+                                  ? "hover:bg-violet-500/20 text-slate-300 hover:text-violet-400"
+                                : isOrange
+                                  ? "hover:bg-orange-500/20 text-slate-300 hover:text-orange-400"
+                                : isGreen
+                                  ? "hover:bg-green-500/20 text-slate-300 hover:text-green-400"
+                                : isPink
+                                  ? "hover:bg-pink-500/20 text-slate-300 hover:text-pink-400"
+                                : isPurple
+                                  ? "hover:bg-purple-500/20 text-slate-300 hover:text-purple-400"
+                                : isPolice
+                                  ? "hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-400"
+                                : "hover:bg-blue-500/20 text-slate-300 hover:text-blue-400" 
+                                : "hover:bg-blue-50 text-gray-500 hover:text-blue-600"
                             )}
                           >
-                            <Tag className="w-3 h-3" />
-                            {tag.name}
-                          </Badge>
-                        ))}
-                        {document.tags.length > 3 && (
-                          <Badge className={cn(
-                            "px-3 py-1.5 text-xs font-medium",
-                            isDark 
-                              ? "bg-slate-700/50 text-slate-300 border border-slate-600/30" 
-                              : "bg-gray-100 text-gray-600"
-                          )}>+{document.tags.length - 3}</Badge>
-                        )}
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteClick(document.id)
+                            }}
+                            className={cn(
+                              "p-2 rounded-lg transition-all duration-200",
+                              isDark 
+                                ? "hover:bg-red-500/20 text-slate-300 hover:text-red-400" 
+                                : "hover:bg-red-50 text-gray-500 hover:text-red-600"
+                            )}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <span className={cn("text-sm font-semibold flex items-center gap-1.5 transition-all duration-300", 
+                          isDark 
+                            ? isCyber
+                              ? "text-red-400 hover:text-red-300"
+                            : isNight
+                              ? "text-violet-400 hover:text-violet-300"
+                            : isOrange
+                              ? "text-orange-400 hover:text-orange-300"
+                            : isGreen
+                              ? "text-green-400 hover:text-green-300"
+                            : isPink
+                              ? "text-pink-400 hover:text-pink-300"
+                            : isPurple
+                              ? "text-purple-400 hover:text-purple-300"
+                            : isPolice
+                              ? "text-cyan-400 hover:text-cyan-300"
+                            : "text-blue-400 hover:text-blue-300" 
+                            : "text-blue-600 hover:text-blue-700")}>
+                          查看详情
+                          <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                        </span>
                       </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-8 space-y-3">
+                {filteredDocuments.map(document => (
+                  <Card
+                    key={document.id}
+                    className={cn(
+                      "group cursor-pointer transition-all duration-300 overflow-hidden rounded-xl",
+                      "hover:shadow-xl",
+                      cardClass(isDark, '', currentTheme),
+                      isDark 
+                        ? isPolice
+                          ? 'bg-gradient-to-r from-[#1a2f50]/95 to-[#0f1f3d]/95 backdrop-blur-xl border border-cyan-500/20 hover:border-cyan-400/40'
+                        : 'bg-gradient-to-r from-slate-800/95 to-slate-700/95 backdrop-blur-lg border border-slate-600/30 hover:border-cyan-400/40'
+                        : 'bg-white/95 backdrop-blur-md border border-gray-100 hover:border-cyan-200'
                     )}
-                    
-                    {/* 操作按钮 */}
-                    <div className={cn(
-                      "pt-5 pb-2 border-t flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-300",
-                      isDark ? "border-slate-700/40" : "border-gray-100"
-                    )}>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={cn(
-                            "h-10 px-5 text-xs font-semibold rounded-xl border transition-all duration-300",
-                            isDark 
-                              ? "border-blue-500/40 text-blue-300 hover:bg-blue-500/20 hover:border-blue-500/60 hover:text-blue-200" 
-                              : "border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditClick(document)
-                          }}
-                        >
-                          <Edit3 className="w-4 h-4 mr-1.5" />
-                          编辑
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className={cn(
-                            "h-10 px-5 text-xs font-semibold rounded-xl transition-all duration-300",
-                            isDark 
-                              ? "bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30 hover:border-red-500/60" 
-                              : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteClick(document.id)
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4 mr-1.5" />
-                          删除
-                        </Button>
+                    onClick={() => navigate(`/documents/${document.id}`)}
+                  >
+                    <CardContent className="px-5 py-4">
+                      <div className="flex items-center gap-4">
+                        {/* 文件图标 */}
+                        <div className={cn(
+                          "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                          fileIcon(document.attachments)
+                        )}>
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        
+                        {/* 文档信息 */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <h3 className={cn(
+                              "font-semibold text-base",
+                              isDark ? "text-white" : "text-gray-800"
+                            )}>
+                              {document.title}
+                            </h3>
+                            {document.category && (
+                              <Badge className={cn(
+                                "px-2 py-0.5 text-xs",
+                                isDark 
+                                  ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" 
+                                  : "bg-blue-50 text-blue-600"
+                              )}>
+                                {document.category.name}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className={cn(
+                            "text-sm truncate mb-2",
+                            isDark ? "text-slate-400" : "text-gray-500"
+                          )}>
+                            {document.description || '暂无内容'}
+                          </p>
+                          <div className="flex items-center gap-4">
+                            <span className={cn("flex items-center gap-1", isDark ? "text-slate-400" : "text-gray-500")}>
+                              <Calendar className="w-3.5 h-3.5" />
+                              {new Date(document.createdAt).toLocaleDateString('zh-CN')}
+                            </span>
+                            <span className={cn("flex items-center gap-1", isDark ? "text-slate-400" : "text-gray-500")}>
+                              <Eye className="w-3.5 h-3.5" />
+                              {document.viewCount || 0} 次浏览
+                            </span>
+                            {document.tags && document.tags.length > 0 && (
+                              <span className={cn("flex items-center gap-1", isDark ? "text-cyan-400" : "text-cyan-600")}>
+                                <Tag className="w-3.5 h-3.5" />
+                                {document.tags.length} 个标签
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* 操作按钮 */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditClick(document)
+                            }}
+                            className={cn(
+                              "p-2 rounded-lg transition-all duration-200",
+                              isDark 
+                                ? "hover:bg-blue-500/20 text-slate-300 hover:text-blue-400" 
+                                : "hover:bg-blue-50 text-gray-500 hover:text-blue-600"
+                            )}
+                            title="编辑"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteClick(document.id)
+                            }}
+                            className={cn(
+                              "p-2 rounded-lg transition-all duration-200",
+                              isDark 
+                                ? "hover:bg-red-500/20 text-slate-300 hover:text-red-400" 
+                                : "hover:bg-red-50 text-gray-500 hover:text-red-600"
+                            )}
+                            title="删除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <ChevronRight className={cn(
+                            "w-5 h-5 transition-transform",
+                            isDark ? "text-slate-400" : "text-gray-400",
+                            "group-hover:translate-x-1"
+                          )} />
+                        </div>
                       </div>
-                      <span className={cn("text-sm font-semibold flex items-center gap-1.5 transition-all duration-300", isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700")}>
-                        查看详情
-                        <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             {/* 空状态 */}
             {filteredDocuments.length === 0 && (
@@ -1313,6 +1858,332 @@ export default function Documents() {
                   上传文档
                 </Button>
               </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 批量上传模态框 */}
+      {showBatchUploadModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <Card className={cn(
+            cardClass(isDark, '', currentTheme),
+            "w-full max-w-5xl shadow-2xl overflow-hidden",
+            isDark ? "shadow-black/60 border border-slate-700/50" : "shadow-gray-300/60 border border-gray-100"
+          )}>
+            <CardHeader className={cn(
+              "pb-4",
+              isDark ? "border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-transparent" : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+            )}>
+              <CardTitle className={cn("flex items-center justify-between text-lg", textClass('primary', isDark, currentTheme))}>
+                <span className="flex items-center gap-2">
+                  <FolderOpen className={cn("w-5 h-5", isDark ? "text-green-400" : "text-green-500")} />
+                  批量上传文档
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setShowBatchUploadModal(false)
+                    setBatchUploadFiles([])
+                    setBatchUploadPreview([])
+                    setBatchUploadCategory(null)
+                  }}
+                  className={cn("h-9 w-9 rounded-xl", isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100")}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </CardTitle>
+              <CardDescription className={textClass('muted', isDark, currentTheme)}>
+                选择文件夹进行批量上传，支持自动创建分类和分组附件
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden">
+              <div className="flex gap-6 h-full">
+                {/* 左侧：上传区域 */}
+                <div className="flex-1 flex flex-col overflow-y-auto pr-2">
+                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
+                    选择文件夹
+                  </h3>
+                  <div className="space-y-5">
+                    {/* 文件上传区域 */}
+                    <div
+                      id="batch-upload-dropzone"
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-4 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300",
+                        batchUploadFiles.length > 0
+                          ? isDark
+                            ? "border-green-500/50 bg-green-500/10"
+                            : "border-green-400 bg-green-100"
+                          : isDark
+                            ? "border-dashed border-slate-600/50 hover:border-solid hover:border-green-500/50 hover:bg-green-500/5"
+                            : "border-dashed border-gray-300 hover:border-solid hover:border-green-400 hover:bg-green-50"
+                      )}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const files = Array.from(e.dataTransfer.files)
+                        if (files.length > 0) {
+                          setBatchUploadFiles(files)
+                          processBatchFiles(files)
+                        }
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onClick={() => document.getElementById('batch-upload-input').click()}
+                    >
+                      <div className={cn(
+                        "w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300",
+                        batchUploadFiles.length > 0
+                          ? isDark
+                            ? "bg-gradient-to-br from-green-600/30 to-emerald-600/30"
+                            : "bg-gradient-to-br from-green-100 to-emerald-100"
+                          : isDark
+                            ? "bg-gradient-to-br from-slate-700/50 to-slate-800/50"
+                            : "bg-gradient-to-br from-gray-100 to-gray-200"
+                      )}>
+                        <FolderOpen className={cn(
+                          "w-8 h-8",
+                          batchUploadFiles.length > 0
+                            ? isDark ? "text-green-400" : "text-green-500"
+                            : isDark ? "text-slate-400" : "text-gray-400"
+                        )} />
+                      </div>
+                      <p className={cn(
+                        "text-lg font-semibold text-center",
+                        batchUploadFiles.length > 0
+                          ? isDark ? "text-green-300" : "text-green-600"
+                          : textClass('primary', isDark, currentTheme)
+                      )}>
+                        {batchUploadFiles.length > 0
+                          ? `已选择 ${batchUploadFiles.length} 个文件`
+                          : '拖拽或点击选择文件夹'}
+                      </p>
+                      <p className={cn("text-sm text-center", textClass('secondary', isDark, currentTheme))}>
+                        将文件夹从 Finder 拖拽到这里，或点击选择<br/>
+                        <span className={cn("text-xs mt-1 block", textClass('muted', isDark, currentTheme))}>
+                          💡 提示：大量文件建议使用拖拽方式
+                        </span>
+                      </p>
+                    </div>
+                    <input
+                      id="batch-upload-input"
+                      type="file"
+                      multiple
+                      webkitdirectory="true"
+                      directory="true"
+                      mozdirectory="true"
+                      allowdirs="true"
+                      nwdirectory="true"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files)
+                        setBatchUploadFiles(files)
+                        processBatchFiles(files)
+                      }}
+                    />
+
+                    {/* 选择目标分类 */}
+                    <div className="space-y-2">
+                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>
+                        目标分类（可选）
+                      </label>
+                      <select
+                        value={batchUploadCategory || ''}
+                        onChange={(e) => setBatchUploadCategory(e.target.value ? +e.target.value : null)}
+                        className={cn(
+                          "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-200",
+                          isDark 
+                            ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-green-500/50" 
+                            : "bg-white border-gray-300 text-gray-900 focus:ring-green-500/30"
+                        )}
+                      >
+                        <option value="">作为根分类</option>
+                        {renderCategoryOptions(categories)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 右侧：预览区域 */}
+                <div className="w-96 flex-shrink-0 flex flex-col">
+                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
+                    上传预览
+                  </h3>
+                  <div className="flex-1 overflow-y-auto pr-2">
+                    {batchUploadPreview.length > 0 ? (
+                      <div className="space-y-4">
+                        {batchUploadPreview.map((item, index) => (
+                          <div key={index} className={cn(
+                            "p-4 rounded-xl",
+                            isDark ? "bg-slate-700/50" : "bg-gray-50"
+                          )}>
+                            <div className="flex items-center gap-2 mb-2">
+                              {item.type === 'category' ? (
+                                <FolderOpen className={cn("w-4 h-4", isDark ? "text-yellow-400" : "text-yellow-600")} />
+                              ) : (
+                                <FileText className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-600")} />
+                              )}
+                              <span className={cn("text-sm font-medium", textClass('primary', isDark, currentTheme))}>
+                                {item.name}
+                              </span>
+                              {item.type === 'document' && item.attachments && (
+                                <span className={cn("text-xs px-2 py-0.5 rounded-full", isDark ? "bg-blue-500/30 text-blue-300" : "bg-blue-100 text-blue-600")}>
+                                  {item.attachments.length} 个附件
+                                </span>
+                              )}
+                            </div>
+                            {item.children && item.children.length > 0 && (
+                              <div className="ml-6 space-y-2">
+                                {item.children.map((child, childIndex) => (
+                                  <div key={childIndex} className="flex items-center gap-2">
+                                    {child.type === 'category' ? (
+                                      <FolderOpen className={cn("w-3 h-3", isDark ? "text-yellow-500" : "text-yellow-600")} />
+                                    ) : (
+                                      <FileText className={cn("w-3 h-3", isDark ? "text-blue-500" : "text-blue-600")} />
+                                    )}
+                                    <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>
+                                      {child.name}
+                                      {child.type === 'document' && child.attachments && (
+                                        <span className={cn("text-xs px-1.5 py-0.5 rounded-full ml-1", isDark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600")}>
+                                          {child.attachments.length}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={cn("flex flex-col items-center justify-center h-64 text-center", textClass('muted', isDark, currentTheme))}>
+                        <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
+                        <p>请选择文件夹</p>
+                        <p className="text-xs mt-1">预览将显示分类结构和文档分组</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            <div className={cn(
+              "flex gap-3 p-4 border-t flex-shrink-0",
+              isDark ? "border-slate-700/50 bg-slate-800/80" : "border-gray-100 bg-gray-50"
+            )}>
+              <Button
+                variant="outline"
+                className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "border-gray-300")}
+                onClick={() => {
+                  setShowBatchUploadModal(false)
+                  setBatchUploadFiles([])
+                  setBatchUploadPreview([])
+                  setBatchUploadCategory(null)
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                className={cn(
+                  "flex-1 h-12 rounded-xl shadow-lg",
+                  isDark
+                    ? "bg-gradient-to-r from-green-600 via-emerald-600 to-green-500 hover:from-green-500 hover:via-emerald-500 hover:to-green-400"
+                    : "bg-gradient-to-r from-green-500 via-emerald-600 to-green-500"
+                )}
+                onClick={() => setShowBatchUploadConfirm(true)}
+                disabled={batchUploadFiles.length === 0}
+              >
+                开始上传
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 批量上传确认弹窗 */}
+      {showBatchUploadConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+          <Card className={cn(
+            cardClass(isDark, '', currentTheme),
+            "w-full max-w-md shadow-2xl overflow-hidden",
+            isDark ? "shadow-black/60 border border-slate-700/50" : "shadow-gray-300/60 border border-gray-100"
+          )}>
+            <CardHeader className={cn(
+              "pb-4",
+              isDark ? "border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-transparent" : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
+            )}>
+              <CardTitle className={cn("flex items-center justify-center text-lg", textClass('primary', isDark, currentTheme))}>
+                <span className="flex items-center gap-2">
+                  <AlertCircle className={cn("w-5 h-5", isDark ? "text-amber-400" : "text-amber-500")} />
+                  确认上传
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="text-center">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4",
+                  isDark ? "bg-amber-500/20" : "bg-amber-100"
+                )}>
+                  <Upload className={cn("w-8 h-8", isDark ? "text-amber-400" : "text-amber-600")} />
+                </div>
+                <h3 className={cn("text-lg font-semibold mb-2", textClass('primary', isDark, currentTheme))}>
+                  即将上传 {batchUploadFiles.length} 个文件
+                </h3>
+                <p className={cn("text-sm mb-4", textClass('secondary', isDark, currentTheme))}>
+                  请确认您要将这些文件上传到知识库系统
+                </p>
+                
+                {/* 文件大小统计 */}
+                <div className={cn(
+                  "p-4 rounded-xl mb-6",
+                  isDark ? "bg-slate-700/50" : "bg-gray-50"
+                )}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={cn("text-sm", textClass('secondary', isDark, currentTheme))}>文件总数</span>
+                    <span className={cn("text-sm font-semibold", textClass('primary', isDark, currentTheme))}>{batchUploadFiles.length} 个</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={cn("text-sm", textClass('secondary', isDark, currentTheme))}>总大小</span>
+                    <span className={cn("text-sm font-semibold", textClass('primary', isDark, currentTheme))}>
+                      {(batchUploadFiles.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            <div className={cn(
+              "flex gap-3 p-4 border-t flex-shrink-0",
+              isDark ? "border-slate-700/50 bg-slate-800/80" : "border-gray-100 bg-gray-50"
+            )}>
+              <Button
+                variant="outline"
+                className={cn("flex-1 h-12 rounded-xl", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "border-gray-300")}
+                onClick={() => setShowBatchUploadConfirm(false)}
+              >
+                取消
+              </Button>
+              <Button
+                className={cn(
+                  "flex-1 h-12 rounded-xl shadow-lg",
+                  isDark
+                    ? "bg-gradient-to-r from-green-600 via-emerald-600 to-green-500 hover:from-green-500 hover:via-emerald-500 hover:to-green-400"
+                    : "bg-gradient-to-r from-green-500 via-emerald-600 to-green-500"
+                )}
+                onClick={() => {
+                  setShowBatchUploadConfirm(false)
+                  handleBatchUpload()
+                }}
+              >
+                确认上传
+              </Button>
+            </div>
           </Card>
         </div>
       )}

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, UsersIcon, Mail, User, Calendar, Shield } from 'lucide-react'
+import { Plus, Edit2, Trash2, UsersIcon, Mail, User, Calendar, Shield, UserCog, RotateCcw, Lock, Unlock } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
-import axios from 'axios'
+import axios from '../api/axios'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 export default function UsersPage() {
@@ -15,8 +15,20 @@ export default function UsersPage() {
   const [roles, setRoles] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditRoleModal, setShowEditRoleModal] = useState(false)
+  const [showEditUserModal, setShowEditUserModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
+  const [editEmail, setEditEmail] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editConfirmPassword, setEditConfirmPassword] = useState('')
+  const [editCurrentPassword, setEditCurrentPassword] = useState('')
+  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false)
+  const [resetPasswordUserId, setResetPasswordUserId] = useState(null)
+  const [resetPasswordUsername, setResetPasswordUsername] = useState('')
+  const [showLockDialog, setShowLockDialog] = useState(false)
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState(null)
+  const [currentUsername, setCurrentUsername] = useState('')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -85,6 +97,118 @@ export default function UsersPage() {
     }
   }
 
+  const handleUpdateUserInfo = async () => {
+    if (!selectedUser) return
+    
+    // 验证新密码
+    if (editPassword && editPassword !== editConfirmPassword) {
+      alert('两次输入的新密码不一致')
+      return
+    }
+    
+    try {
+      const updateData = {}
+      if (editEmail) updateData.email = editEmail
+      if (editPassword) {
+        if (!editCurrentPassword) {
+          alert('请输入原密码')
+          return
+        }
+        updateData.password = editPassword
+        updateData.currentPassword = editCurrentPassword
+      }
+      
+      const response = await axios.put(`/api/auth/users/${selectedUser.id}`, updateData)
+      
+      if (response.data.error) {
+        alert(response.data.error)
+        return
+      }
+      
+      setShowEditUserModal(false)
+      setSelectedUser(null)
+      setEditEmail('')
+      setEditPassword('')
+      setEditConfirmPassword('')
+      setEditCurrentPassword('')
+      fetchUsers()
+    } catch (error) {
+      console.error('Failed to update user:', error)
+      alert(error.response?.data?.error || '更新失败')
+    }
+  }
+
+  const openResetPasswordDialog = (user) => {
+    setResetPasswordUserId(user.id)
+    setResetPasswordUsername(user.username)
+    setShowResetPasswordDialog(true)
+  }
+
+  const handleResetPassword = async () => {
+    if (!resetPasswordUserId) return
+    try {
+      await axios.post(`/api/auth/users/${resetPasswordUserId}/reset-password`)
+      setShowResetPasswordDialog(false)
+      setResetPasswordUserId(null)
+      setResetPasswordUsername('')
+      fetchUsers()
+      alert('密码已重置为 123456')
+    } catch (error) {
+      console.error('Failed to reset password:', error)
+      alert(error.response?.data?.error || '重置密码失败')
+    }
+  }
+
+  const openLockDialog = (user) => {
+    setCurrentUserId(user.id)
+    setCurrentUsername(user.username)
+    setShowLockDialog(true)
+  }
+
+  const handleLockUser = async () => {
+    if (!currentUserId) return
+    try {
+      await axios.post(`/api/auth/users/${currentUserId}/lock`)
+      fetchUsers()
+      setShowLockDialog(false)
+      setCurrentUserId(null)
+      setCurrentUsername('')
+    } catch (error) {
+      console.error('Failed to lock user:', error)
+      alert(error.response?.data?.error || '锁定用户失败')
+    }
+  }
+
+  const openUnlockDialog = (user) => {
+    setCurrentUserId(user.id)
+    setCurrentUsername(user.username)
+    setShowUnlockDialog(true)
+  }
+
+  const handleUnlockUser = async () => {
+    if (!currentUserId) return
+    try {
+      await axios.post(`/api/auth/users/${currentUserId}/unlock`)
+      fetchUsers()
+      setShowUnlockDialog(false)
+      setCurrentUserId(null)
+      setCurrentUsername('')
+    } catch (error) {
+      console.error('Failed to unlock user:', error)
+      alert(error.response?.data?.error || '解锁用户失败')
+    }
+  }
+
+  const openEditUserModal = (user) => {
+    console.log('Opening edit modal for user:', user)
+    setSelectedUser(user)
+    setEditEmail(user.email)
+    setEditPassword('')
+    setEditConfirmPassword('')
+    setEditCurrentPassword('')
+    setShowEditUserModal(true)
+  }
+
   const openEditRoleModal = (user) => {
     setSelectedUser(user)
     setRoleId(user.roleId?.toString() || '')
@@ -131,7 +255,10 @@ export default function UsersPage() {
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className={cn(
+                      "flex items-center gap-3 mb-2 cursor-pointer",
+                      "hover:opacity-80 transition-opacity"
+                    )} onClick={() => openEditUserModal(user)}>
                     <div className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center",
                       isDark ? "bg-cyan-500/20" : "bg-blue-100"
@@ -139,7 +266,11 @@ export default function UsersPage() {
                       <User className={cn("w-5 h-5", isDark ? "text-cyan-400" : "text-blue-600")} />
                     </div>
                     <div>
-                      <h3 className={cn("text-xl font-semibold", isDark ? "text-white" : "text-gray-900")}>
+                      <h3 className={cn(
+                        "text-xl font-semibold",
+                        isDark ? "text-white" : "text-gray-900",
+                        "underline underline-offset-4 decoration-transparent hover:decoration-current"
+                      )}>
                         {user.username}
                       </h3>
                       <div className="flex items-center gap-1">
@@ -169,11 +300,51 @@ export default function UsersPage() {
                   <Button 
                     variant="outline" 
                     size="sm"
+                    onClick={() => openEditUserModal(user)}
+                    className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}
+                    title="编辑用户信息"
+                  >
+                    <UserCog className="w-4 h-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
                     onClick={() => openEditRoleModal(user)}
                     className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}
+                    title="编辑角色"
                   >
                     <Edit2 className="w-4 h-4" />
                   </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={cn("text-amber-500 hover:text-amber-400", isDark ? "border-amber-500/30 hover:bg-amber-500/10" : "")}
+                    onClick={() => openResetPasswordDialog(user)}
+                    title="重置密码"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                  {user.isLocked ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className={cn("text-green-500 hover:text-green-400", isDark ? "border-green-500/30 hover:bg-green-500/10" : "")}
+                      onClick={() => openUnlockDialog(user)}
+                      title="解锁用户"
+                    >
+                      <Unlock className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className={cn("text-red-500 hover:text-red-400", isDark ? "border-red-500/30 hover:bg-red-500/10" : "")}
+                      onClick={() => openLockDialog(user)}
+                      title="锁定用户"
+                    >
+                      <Lock className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -312,6 +483,80 @@ export default function UsersPage() {
         </div>
       )}
 
+      {showEditUserModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <Card className={cn("w-full max-w-md", isDark ? "bg-slate-800/95 border-slate-700/50" : "bg-white")}>
+            <CardHeader className={cn(isDark ? "border-b border-slate-700/40" : "border-b border-gray-200")}>
+              <CardTitle className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>
+                编辑用户信息 - {selectedUser.username}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>邮箱</Label>
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="请输入邮箱"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>原密码（修改密码时需要）</Label>
+                <Input
+                  type="password"
+                  value={editCurrentPassword}
+                  onChange={(e) => setEditCurrentPassword(e.target.value)}
+                  placeholder="请输入原密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>新密码（留空则不修改）</Label>
+                <Input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="请输入新密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>确认新密码</Label>
+                <Input
+                  type="password"
+                  value={editConfirmPassword}
+                  onChange={(e) => setEditConfirmPassword(e.target.value)}
+                  placeholder="请再次输入新密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  className={cn("flex-1", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "")}
+                  onClick={() => {
+                    setShowEditUserModal(false)
+                    setSelectedUser(null)
+                    setEditEmail('')
+                    setEditPassword('')
+                    setEditConfirmPassword('')
+                    setEditCurrentPassword('')
+                  }}
+                >
+                  取消
+                </Button>
+                <Button onClick={handleUpdateUserInfo} className="flex-1">
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  保存
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <ConfirmDialog
         isOpen={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
@@ -321,6 +566,38 @@ export default function UsersPage() {
         confirmText="删除"
         cancelText="取消"
         danger
+      />
+
+      <ConfirmDialog
+        isOpen={showResetPasswordDialog}
+        onClose={() => setShowResetPasswordDialog(false)}
+        onConfirm={handleResetPassword}
+        title="确认重置密码"
+        message={`确定要将用户 "${resetPasswordUsername}" 的密码重置为 "123456" 吗？用户登录后应立即修改密码。`}
+        confirmText="重置"
+        cancelText="取消"
+        danger
+      />
+
+      <ConfirmDialog
+        isOpen={showLockDialog}
+        onClose={() => setShowLockDialog(false)}
+        onConfirm={handleLockUser}
+        title="确认锁定用户"
+        message={`确定要锁定用户 "${currentUsername}" 吗？锁定后该用户将无法登录系统。`}
+        confirmText="锁定"
+        cancelText="取消"
+        danger
+      />
+
+      <ConfirmDialog
+        isOpen={showUnlockDialog}
+        onClose={() => setShowUnlockDialog(false)}
+        onConfirm={handleUnlockUser}
+        title="确认解锁用户"
+        message={`确定要解锁用户 "${currentUsername}" 吗？解锁后该用户将可以正常登录系统。`}
+        confirmText="解锁"
+        cancelText="取消"
       />
     </div>
   )

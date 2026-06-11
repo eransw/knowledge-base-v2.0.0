@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import axios from 'axios'
+import axios from '../api/axios'
 import { Tag, Plus, Edit2, Trash2, Tags as TagsIcon, X, GripVertical } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'

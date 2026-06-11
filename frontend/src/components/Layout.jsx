@@ -20,7 +20,11 @@ import {
 } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { cn } from '../lib/utils'
+import api from '../api/axios'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -28,11 +32,73 @@ export default function Layout() {
   const { colors, isDark, currentTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  
+  // 主题变量
+  const isPolice = currentTheme === 'police'
+  const isNight = currentTheme === 'night'
+  const isCyber = currentTheme === 'cyber'
+  const isPurple = currentTheme === 'purple'
+  const isGreen = currentTheme === 'green'
+  const isOrange = currentTheme === 'orange'
+  const isPink = currentTheme === 'pink'
+  
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editEmail, setEditEmail] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editConfirmPassword, setEditConfirmPassword] = useState('')
+  const [editCurrentPassword, setEditCurrentPassword] = useState('')
 
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleOpenEditModal = () => {
+    setEditEmail(user.email || '')
+    setEditPassword('')
+    setEditConfirmPassword('')
+    setEditCurrentPassword('')
+    setShowEditModal(true)
+  }
+
+  const handleUpdateUserInfo = async () => {
+    // 验证新密码
+    if (editPassword && editPassword !== editConfirmPassword) {
+      alert('两次输入的新密码不一致')
+      return
+    }
+    
+    try {
+      const updateData = {}
+      if (editEmail) updateData.email = editEmail
+      if (editPassword) {
+        if (!editCurrentPassword) {
+          alert('请输入原密码')
+          return
+        }
+        updateData.password = editPassword
+        updateData.currentPassword = editCurrentPassword
+      }
+      
+      const response = await api.put(`/api/auth/users/${user.id}`, updateData)
+      
+      if (response.data.error) {
+        alert(response.data.error)
+        return
+      }
+      
+      setShowEditModal(false)
+      setEditEmail('')
+      setEditPassword('')
+      setEditConfirmPassword('')
+      setEditCurrentPassword('')
+      // 重新加载用户信息
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to update user:', error)
+      alert(error.response?.data?.error || '更新失败')
+    }
   }
 
   const navItems = [
@@ -87,9 +153,6 @@ export default function Layout() {
     
     return filtered
   }, [user, navItems])
-  const isPolice = currentTheme === 'police'
-  const isNight = currentTheme === 'night'
-  const isCyber = currentTheme === 'cyber'
 
   // 根据主题选择合适的背景和文字颜色
   const headerBg = isPolice ? 'bg-[#003366]/95' : isNight ? 'bg-[#1a1333]/95' : isCyber ? 'bg-[#18181b]/95' : (isDark ? 'bg-slate-900/95' : 'bg-white/90')
@@ -274,7 +337,7 @@ export default function Layout() {
 
             <div className="flex items-center gap-4">
               {user && (
-                <div className="hidden sm:flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-3 cursor-pointer" onClick={handleOpenEditModal}>
                   <div className="text-right mr-2">
                     <p className={cn("text-sm font-semibold", textColor)}>
                       {user.username}
@@ -284,7 +347,7 @@ export default function Layout() {
                     </p>
                   </div>
                   <div className={cn(
-                    "w-9 h-9 rounded-full flex items-center justify-center",
+                    "w-9 h-9 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all",
                     getAvatarBg()
                   )}>
                     <User className="w-5 h-5 text-white" />
@@ -349,9 +412,9 @@ export default function Layout() {
               ))}
               <div className={cn("border-t pt-4 mt-2", headerBorder)}>
                 {user && (
-                  <div className="flex items-center gap-3 mb-4 px-4">
+                  <div className="flex items-center gap-3 mb-4 px-4 cursor-pointer" onClick={handleOpenEditModal}>
                     <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center",
+                      "w-10 h-10 rounded-full flex items-center justify-center shadow-lg",
                       getAvatarBg()
                     )}>
                       <User className="w-5 h-5 text-white" />
@@ -393,20 +456,115 @@ export default function Layout() {
       {/* 底部版权信息 - 固定在底部 */}
       <footer className={cn(
         "fixed bottom-0 left-0 right-0 z-40 py-4 border-t backdrop-blur-xl",
-        isPolice ? "border-blue-500/30 bg-[#003366]/90" :
+        isPolice ? "border-cyan-500/30 bg-[#0a1628]/90" :
         isNight ? "border-violet-500/30 bg-[#1a1333]/90" :
         isCyber ? "border-red-500/30 bg-[#18181b]/90" :
+        isPurple ? "border-purple-500/30 bg-[#1e1b4b]/90" :
+        isGreen ? "border-green-500/30 bg-[#14532d]/90" :
+        isOrange ? "border-orange-500/30 bg-[#7c2d12]/90" :
+        isPink ? "border-pink-500/30 bg-[#831843]/90" :
         (isDark ? "border-slate-700/30 bg-slate-900/90" : "border-gray-200/50 bg-white/90")
       )}>
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-center gap-2">
-            <Copyright className={cn("w-4 h-4", isDark ? "text-slate-500" : "text-gray-400")} />
-            <span className={cn("text-sm", isDark ? "text-slate-500" : "text-gray-500")}>
+            <Copyright className={cn("w-4 h-4", 
+              isDark 
+                ? isPolice ? "text-cyan-400"
+                : isCyber ? "text-red-400"
+                : isNight ? "text-violet-400"
+                : isPurple ? "text-purple-400"
+                : isGreen ? "text-green-400"
+                : isOrange ? "text-orange-400"
+                : isPink ? "text-pink-400"
+                : "text-slate-400"
+                : "text-gray-400")} />
+            <span className={cn("text-sm", 
+              isDark 
+                ? isPolice ? "text-cyan-300"
+                : isCyber ? "text-red-300"
+                : isNight ? "text-violet-300"
+                : isPurple ? "text-purple-300"
+                : isGreen ? "text-green-300"
+                : isOrange ? "text-orange-300"
+                : isPink ? "text-pink-300"
+                : "text-slate-400"
+                : "text-gray-500")}>
               {config.copyright || '2024 知识库管理系统 版权所有'}
             </span>
           </div>
         </div>
       </footer>
+
+      {/* 编辑用户信息弹窗 */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+          <Card className={cn("w-full max-w-md", isDark ? "bg-slate-800/95 border-slate-700/50" : "bg-white")}>
+            <CardHeader className={cn(isDark ? "border-b border-slate-700/40" : "border-b border-gray-200")}>
+              <CardTitle className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>
+                编辑用户信息 - {user.username}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>邮箱</Label>
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="请输入邮箱"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>原密码（修改密码时需要）</Label>
+                <Input
+                  type="password"
+                  value={editCurrentPassword}
+                  onChange={(e) => setEditCurrentPassword(e.target.value)}
+                  placeholder="请输入原密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>新密码（留空则不修改）</Label>
+                <Input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="请输入新密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={isDark ? "text-slate-300" : "text-gray-700"}>确认新密码</Label>
+                <Input
+                  type="password"
+                  value={editConfirmPassword}
+                  onChange={(e) => setEditConfirmPassword(e.target.value)}
+                  placeholder="请再次输入新密码"
+                  className={cn(isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  className={cn("flex-1", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "")}
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditEmail('')
+                    setEditPassword('')
+                  }}
+                >
+                  取消
+                </Button>
+                <Button onClick={handleUpdateUserInfo} className="flex-1">
+                  保存
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

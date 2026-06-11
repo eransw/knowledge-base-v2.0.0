@@ -7,7 +7,7 @@ import { Label } from '../components/ui/label';
 import { useTheme } from '../context/ThemeContext';
 import { cn } from '../lib/utils';
 import { cardClass, textClass, inputClass } from '../lib/themeStyles';
-import axios from 'axios';
+import axios from '../api/axios';
 
 export default function AIConfig() {
   const { isDark, currentTheme } = useTheme();

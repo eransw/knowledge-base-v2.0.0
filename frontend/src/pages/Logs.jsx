@@ -6,7 +6,7 @@ import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
-import axios from 'axios'
+import axios from '../api/axios'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 export default function LogsPage() {

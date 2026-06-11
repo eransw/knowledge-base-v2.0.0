@@ -21,7 +21,10 @@ export function ConfirmDialog({ isOpen, onClose, onConfirm, title, message }) {
           <CardTitle className={cn("text-lg", isDark ? "text-slate-100" : "text-gray-900")}>{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className={cn("mb-4", isDark ? "text-slate-300" : "text-gray-600")}>{message}</p>
+          <p 
+            className={cn("mb-4", isDark ? "text-slate-300" : "text-gray-600")}
+            dangerouslySetInnerHTML={{ __html: message }}
+          />
           <div className="flex gap-3">
             <Button variant="outline" className={cn("flex-1", isDark ? "border-slate-600/50 hover:bg-slate-700/30 text-white" : "")} onClick={onClose}>
               取消

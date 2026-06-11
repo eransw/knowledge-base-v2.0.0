@@ -3,7 +3,7 @@ import { Send, Loader2, Bot, User, Sparkles, AtSign, Hash, Image, Settings, Refr
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { cn } from '../lib/utils';
-import axios from 'axios';
+import axios from '../api/axios';
 import { useTheme } from '../context/ThemeContext';
 
 export default function AIChat({ documentId }) {

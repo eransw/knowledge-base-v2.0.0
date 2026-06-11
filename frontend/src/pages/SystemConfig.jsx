@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Save, RotateCcw, CheckCircle, Palette, GripVertical, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
+import { Settings, Save, RotateCcw, CheckCircle, Palette, GripVertical, ArrowUp, ArrowDown, RefreshCw, Shield } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -9,7 +9,7 @@ import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
 import { cardClass, textClass, inputClass } from '../lib/themeStyles'
 import { useAuth } from '../context/AuthContext'
-import axios from 'axios'
+import axios from '../api/axios'
 
 export default function SystemConfig() {
   const { config, saveConfig } = useConfig()
@@ -90,9 +90,33 @@ export default function SystemConfig() {
     loginTitle: '欢迎登录',
     loginSubtitle: '管理您的文档和知识',
     siteName: '知识库管理系统',
-    copyright: '2024 知识库管理系统 版权所有',
+    copyright: '2026 知识库管理系统 版权所有 李大聪',
   })
+  const [securityConfigs, setSecurityConfigs] = useState({
+    maxFailedAttempts: '3',
+    lockDurationHours: '24',
+  })
+  const [securitySaved, setSecuritySaved] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    // 从 context 获取已保存的配置数据
+    if (config) {
+      setConfigs(prev => ({
+        ...prev,
+        loginTitle: config.loginTitle || prev.loginTitle,
+        loginSubtitle: config.loginSubtitle || prev.loginSubtitle,
+        siteName: config.siteName || prev.siteName,
+        copyright: config.copyright || prev.copyright,
+      }))
+      // 获取安全配置数据
+      setSecurityConfigs(prev => ({
+        ...prev,
+        maxFailedAttempts: config['security.maxFailedAttempts'] || prev.maxFailedAttempts,
+        lockDurationHours: config['security.lockDurationHours'] || prev.lockDurationHours,
+      }))
+    }
+  }, [config])
 
   useEffect(() => {
     const savedOrder = user?.menuOrder
@@ -172,6 +196,28 @@ export default function SystemConfig() {
     setSaved(false)
   }
 
+  const handleSecurityChange = (key, value) => {
+    setSecurityConfigs(prev => ({ ...prev, [key]: value }))
+    setSecuritySaved(false)
+  }
+
+  const handleSecuritySave = async () => {
+    try {
+      await axios.post('/api/config', { 
+        key: 'security.maxFailedAttempts', 
+        value: securityConfigs.maxFailedAttempts 
+      })
+      await axios.post('/api/config', { 
+        key: 'security.lockDurationHours', 
+        value: securityConfigs.lockDurationHours 
+      })
+      setSecuritySaved(true)
+      setTimeout(() => setSecuritySaved(false), 3000)
+    } catch (error) {
+      console.error('Failed to save security configs:', error)
+    }
+  }
+
   const configFields = [
     { key: 'siteName', label: '网站名称', placeholder: '请输入网站名称' },
     { key: 'loginTitle', label: '登录页面标题', placeholder: '请输入登录页面标题' },
@@ -186,7 +232,7 @@ export default function SystemConfig() {
           ? cn("bg-gradient-to-br", gradientColors.from, gradientColors.via, gradientColors.to)
           : "bg-gradient-to-br from-slate-900 via-slate-800/50 to-slate-900"
         : "bg-gradient-to-br from-white via-gray-50 to-blue-50")}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <div>
           <h1 className={cn("text-3xl font-bold",
             isDark && isSpecialTheme 
@@ -198,39 +244,7 @@ export default function SystemConfig() {
           </h1>
           <p className={cn("mt-1", textClass('muted', isDark, currentTheme))}>管理系统的各项配置</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={handleReset} className={cn(isDark && isSpecialTheme ? cn(cardColors.border, `text-${gradientColors.accent}-400`) : isDark && "border-slate-600/50 hover:bg-slate-700/30 text-gray-200")}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            重置
-          </Button>
-          <Button onClick={handleSave} className={cn("shadow-lg",
-            isDark && isSpecialTheme 
-              ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`)
-              : "bg-blue-600 hover:bg-blue-700")}>
-            <Save className="w-4 h-4 mr-2" />
-            保存配置
-          </Button>
-        </div>
       </div>
-
-      {saved && (
-        <div className={cn(
-          "flex items-center gap-2 px-4 py-3 rounded-lg",
-          isDark 
-            ? isSpecialTheme
-              ? cn("bg", `-${cardColors.success}-500/15`, "border", cardColors.border)
-              : "bg-green-500/15 border border-green-500/30"
-            : "bg-green-50 border border-green-200"
-        )}>
-          <CheckCircle className={cn(
-            "w-5 h-5",
-            isDark ? isSpecialTheme ? `text-${cardColors.success}-400` : "text-green-400" : "text-green-500"
-          )} />
-          <span className={cn(
-            isDark ? isSpecialTheme ? `text-${cardColors.success}-300` : "text-green-300" : "text-green-700"
-          )}>配置已保存成功！</span>
-        </div>
-      )}
 
       <Card className={cn(cardClass(isDark, '', currentTheme), isSpecialTheme ? cardColors.shadow : "shadow-lg",
         isDark && isSpecialTheme && cn("bg-gradient-to-br", cardColors.bgFrom, cardColors.bgTo, cardColors.border))}>
@@ -255,6 +269,44 @@ export default function SystemConfig() {
               />
             </div>
           ))}
+          {saved && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-3 rounded-lg",
+              isDark 
+                ? isSpecialTheme
+                  ? cn("bg", `-${cardColors.success}-500/15`, "border", cardColors.border)
+                : "bg-green-500/15 border border-green-500/30"
+              : "bg-green-50 border border-green-200"
+            )}>
+              <CheckCircle className={cn(
+                "w-5 h-5",
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-400` : "text-green-400" : "text-green-500"
+              )} />
+              <span className={cn(
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-300` : "text-green-300" : "text-green-700"
+              )}>基本设置已保存成功！</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              className={cn(
+                "flex items-center gap-2",
+                isDark && isSpecialTheme ? cn(cardColors.border, `text-${gradientColors.accent}-400`) : isDark && "border-slate-600/50 hover:bg-slate-700/30 text-gray-200"
+              )}
+            >
+              <RotateCcw className="w-4 h-4" />
+              重置
+            </Button>
+            <Button onClick={handleSave} className={cn("shadow-lg",
+              isDark && isSpecialTheme 
+                ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`)
+                : "bg-blue-600 hover:bg-blue-700")}>
+              <Save className="w-4 h-4 mr-2" />
+              保存基本设置
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -394,12 +446,42 @@ export default function SystemConfig() {
                   }}
                   className={cn(
                     "flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-grab active:cursor-grabbing",
-                    isDark ? "bg-slate-700/30 border-slate-600/50 hover:border-cyan-500/50" : "bg-gray-50 border-gray-200 hover:border-blue-300",
+                    isDark 
+                      ? isPolice ? "bg-slate-700/30 border-cyan-500/30 hover:border-cyan-400/50"
+                      : isCyber ? "bg-slate-700/30 border-red-500/30 hover:border-red-400/50"
+                      : isNight ? "bg-slate-700/30 border-violet-500/30 hover:border-violet-400/50"
+                      : isPurple ? "bg-slate-700/30 border-purple-500/30 hover:border-purple-400/50"
+                      : isGreen ? "bg-slate-700/30 border-green-500/30 hover:border-green-400/50"
+                      : isOrange ? "bg-slate-700/30 border-orange-500/30 hover:border-orange-400/50"
+                      : isPink ? "bg-slate-700/30 border-pink-500/30 hover:border-pink-400/50"
+                      : "bg-slate-700/30 border-slate-600/50 hover:border-blue-400/50"
+                      : "bg-gray-50 border-gray-200 hover:border-blue-300",
                     draggedIndex === index && "opacity-50 scale-95",
-                    dragOverIndex === index && draggedIndex !== index && (isDark ? "border-cyan-500 bg-cyan-500/10" : "border-blue-500 bg-blue-50")
+                    dragOverIndex === index && draggedIndex !== index && (
+                      isDark 
+                        ? isPolice ? "border-cyan-500 bg-cyan-500/10"
+                        : isCyber ? "border-red-500 bg-red-500/10"
+                        : isNight ? "border-violet-500 bg-violet-500/10"
+                        : isPurple ? "border-purple-500 bg-purple-500/10"
+                        : isGreen ? "border-green-500 bg-green-500/10"
+                        : isOrange ? "border-orange-500 bg-orange-500/10"
+                        : isPink ? "border-pink-500 bg-pink-500/10"
+                        : "border-blue-500 bg-blue-500/10"
+                        : "border-blue-500 bg-blue-50"
+                    )
                   )}
                 >
-                  <GripVertical className={cn("w-5 h-5 flex-shrink-0", isDark ? "text-slate-400" : "text-gray-400")} />
+                  <GripVertical className={cn("w-5 h-5 flex-shrink-0", 
+                    isDark 
+                      ? isPolice ? "text-cyan-400"
+                      : isCyber ? "text-red-400"
+                      : isNight ? "text-violet-400"
+                      : isPurple ? "text-purple-400"
+                      : isGreen ? "text-green-400"
+                      : isOrange ? "text-orange-400"
+                      : isPink ? "text-pink-400"
+                      : "text-slate-400"
+                      : "text-gray-400")} />
                   <span className={cn("flex-1 font-medium", textClass('secondary', isDark, currentTheme))}>
                     {menu.label}
                   </span>
@@ -412,7 +494,23 @@ export default function SystemConfig() {
                       className={cn(
                         "h-8 w-8 rounded-lg",
                         index === 0 ? "opacity-30 cursor-not-allowed" : "",
-                        isDark ? "hover:bg-slate-600/50" : "hover:bg-blue-100"
+                        isDark 
+                          ? isPolice
+                            ? "text-cyan-400 hover:bg-cyan-500/20"
+                          : isCyber
+                            ? "text-red-400 hover:bg-red-500/20"
+                          : isNight
+                            ? "text-violet-400 hover:bg-violet-500/20"
+                          : isPurple
+                            ? "text-purple-400 hover:bg-purple-500/20"
+                          : isGreen
+                            ? "text-green-400 hover:bg-green-500/20"
+                          : isOrange
+                            ? "text-orange-400 hover:bg-orange-500/20"
+                          : isPink
+                            ? "text-pink-400 hover:bg-pink-500/20"
+                          : "text-slate-300 hover:bg-slate-600/50"
+                          : "text-gray-600 hover:bg-blue-100"
                       )}
                     >
                       <ArrowUp className="w-4 h-4" />
@@ -425,7 +523,23 @@ export default function SystemConfig() {
                       className={cn(
                         "h-8 w-8 rounded-lg",
                         index === menuOrder.length - 1 ? "opacity-30 cursor-not-allowed" : "",
-                        isDark ? "hover:bg-slate-600/50" : "hover:bg-blue-100"
+                        isDark 
+                          ? isPolice
+                            ? "text-cyan-400 hover:bg-cyan-500/20"
+                          : isCyber
+                            ? "text-red-400 hover:bg-red-500/20"
+                          : isNight
+                            ? "text-violet-400 hover:bg-violet-500/20"
+                          : isPurple
+                            ? "text-purple-400 hover:bg-purple-500/20"
+                          : isGreen
+                            ? "text-green-400 hover:bg-green-500/20"
+                          : isOrange
+                            ? "text-orange-400 hover:bg-orange-500/20"
+                          : isPink
+                            ? "text-pink-400 hover:bg-pink-500/20"
+                          : "text-slate-300 hover:bg-slate-600/50"
+                          : "text-gray-600 hover:bg-blue-100"
                       )}
                     >
                       <ArrowDown className="w-4 h-4" />
@@ -476,6 +590,84 @@ export default function SystemConfig() {
             >
               <Save className="w-4 h-4 mr-2" />
               保存排序
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className={cn(cardClass(isDark, '', currentTheme), "shadow-lg")}>
+        <CardHeader>
+          <CardTitle className={cn("flex items-center gap-2", textClass('primary', isDark, currentTheme))}>
+            <Shield className={cn("w-5 h-5", isDark ? "text-amber-400" : "text-amber-500")} />
+            用户安全管理
+          </CardTitle>
+          <CardDescription className={textClass('muted', isDark, currentTheme)}>
+            配置用户登录安全相关的设置
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>
+              密码错误次数限制
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              max="10"
+              value={securityConfigs.maxFailedAttempts || ''}
+              onChange={(e) => handleSecurityChange('maxFailedAttempts', e.target.value)}
+              placeholder="请输入密码错误次数限制"
+              className={cn(inputClass(isDark, '', currentTheme), "h-12 text-base w-32")}
+            />
+            <p className={cn("text-sm", textClass('muted', isDark, currentTheme))}>
+              用户登录时密码错误超过此次数将自动锁定账户，默认值为 3 次
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>
+              自动解锁时间（小时）
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              max="168"
+              value={securityConfigs.lockDurationHours || ''}
+              onChange={(e) => handleSecurityChange('lockDurationHours', e.target.value)}
+              placeholder="请输入自动解锁时间"
+              className={cn(inputClass(isDark, '', currentTheme), "h-12 text-base w-32")}
+            />
+            <p className={cn("text-sm", textClass('muted', isDark, currentTheme))}>
+              用户被自动锁定后，经过此时间将自动解锁，默认值为 24 小时
+            </p>
+          </div>
+          {securitySaved && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-3 rounded-lg",
+              isDark 
+                ? isSpecialTheme
+                  ? cn("bg", `-${cardColors.success}-500/15`, "border", cardColors.border)
+                : "bg-green-500/15 border border-green-500/30"
+              : "bg-green-50 border border-green-200"
+            )}>
+              <CheckCircle className={cn(
+                "w-5 h-5",
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-400` : "text-green-400" : "text-green-500"
+              )} />
+              <span className={cn(
+                isDark ? isSpecialTheme ? `text-${cardColors.success}-300` : "text-green-300" : "text-green-700"
+              )}>安全配置已保存成功！</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              onClick={handleSecuritySave}
+              className={cn("shadow-lg",
+                isDark && isSpecialTheme 
+                  ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`)
+                  : "bg-blue-600 hover:bg-blue-700")}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              保存安全配置
             </Button>
           </div>
         </CardContent>

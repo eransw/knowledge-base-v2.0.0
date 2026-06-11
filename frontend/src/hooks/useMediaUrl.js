@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../api/axios';
 
 export const useMediaUrl = (attachmentId, type = 'download') => {
   const [url, setUrl] = useState(null);

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
+import axios from '../api/axios'
 import { themes, defaultTheme } from '../config/themes'
 
 const ThemeContext = createContext()

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
+import axios from '../api/axios'
 import {
   FolderOpen,
   Plus,
@@ -20,6 +20,7 @@ import { Badge } from '../components/ui/badge'
 import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
 import { cardClass, textClass, inputClass } from '../lib/themeStyles'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   DndContext,
   DragOverlay,
@@ -286,6 +287,9 @@ export default function Categories() {
   const [lastMouseY, setLastMouseY] = useState(0)
   const [activeElementLeft, setActiveElementLeft] = useState(0)
   const [activeElementTop, setActiveElementTop] = useState(0)
+  // 删除确认对话框状态
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteConfirmData, setDeleteConfirmData] = useState(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -348,13 +352,49 @@ export default function Categories() {
   }
 
   async function handleDelete(id) {
-    if (confirm('确定要删除这个分类吗？所有子分类将变为顶级分类。')) {
-      try {
-        await axios.delete(`/api/categories/${id}`)
-        fetchCategories()
-      } catch (error) {
-        console.error('Delete category failed:', error)
+    try {
+      // 获取删除信息
+      const deleteInfoResponse = await axios.get(`/api/categories/${id}/delete-info`)
+      const { subcategoryCount, documentCount, fileCount } = deleteInfoResponse.data
+      
+      // 构建警告消息
+      let warningMessage = '删除后将同时删除：<ul>'
+      if (subcategoryCount > 0) {
+        warningMessage += `<li>${subcategoryCount} 个子分类</li>`
       }
+      if (documentCount > 0) {
+        warningMessage += `<li>${documentCount} 个文档</li>`
+      }
+      if (fileCount > 0) {
+        warningMessage += `<li>${fileCount} 个文件附件</li>`
+      }
+      warningMessage += '</ul>'
+      
+      // 设置删除确认对话框数据
+      setDeleteConfirmData({
+        id,
+        message: warningMessage
+      })
+      // 打开删除确认对话框
+      setDeleteConfirmOpen(true)
+    } catch (error) {
+      console.error('Delete category failed:', error)
+      alert(`删除失败: ${error.response?.data?.message || error.message}`)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirmData) return
+    
+    try {
+      await axios.delete(`/api/categories/${deleteConfirmData.id}`)
+      fetchCategories()
+    } catch (error) {
+      console.error('Delete category failed:', error)
+      alert(`删除失败: ${error.response?.data?.message || error.message}`)
+    } finally {
+      setDeleteConfirmOpen(false)
+      setDeleteConfirmData(null)
     }
   }
 
@@ -798,6 +838,17 @@ export default function Categories() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        onClose={() => {
+          setDeleteConfirmOpen(false)
+          setDeleteConfirmData(null)
+        }}
+        onConfirm={confirmDelete}
+        title="确定要删除这个分类吗？"
+        message={deleteConfirmData?.message}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import axios from '../api/axios'
 import { useMediaUrl } from '../hooks/useMediaUrl'
 import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle, Code, TableIcon, Minus, Quote, ListTodo, Highlighter, Strikethrough, Undo, Redo, Link2, Type, Palette, ListChecks, Grid3X3, Info } from 'lucide-react'
 import { Button } from '../components/ui/button'

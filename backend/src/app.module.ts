@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './modules/auth/auth.module';
 import { DocumentModule } from './modules/document/document.module';
 import { CategoryModule } from './modules/category/category.module';
@@ -19,6 +20,7 @@ import * as path from 'path';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: true,
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     DocumentModule,
     CategoryModule,

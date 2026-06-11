@@ -1,12 +1,15 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { User } from './user.entity';
 import { Role } from '../role/role.entity';
 import { Document } from '../document/document.entity';
+import { FileAttachment } from '../document/file-attachment.entity';
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
 import { Config } from '../config/config.entity';
+import { Note } from '../note/note.entity';
+import { Log } from '../log/log.entity';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
@@ -14,6 +17,10 @@ import { LogService } from '../log/log.service';
 
 @Injectable()
 export class AuthService {
+  // 默认安全配置
+  private readonly DEFAULT_MAX_FAILED_ATTEMPTS = 3;
+  private readonly DEFAULT_LOCK_DURATION_HOURS = 24;
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -71,9 +78,61 @@ export class AuthService {
       throw new UnauthorizedException('用户不存在');
     }
     
+    // 检查用户是否被锁定
+    if (user.isLocked) {
+      // 检查锁定是否已过期
+      if (user.lockExpireTime && new Date() > user.lockExpireTime) {
+        // 自动解锁用户
+        user.isLocked = false;
+        user.lockedAt = null;
+        user.lockExpireTime = null;
+        user.failedAttempts = 0;
+        await this.userRepository.save(user);
+      } else {
+        throw new UnauthorizedException('用户已锁定，请联系管理员解锁');
+      }
+    }
+    
     // 再检查密码是否正确
     if (!(await bcrypt.compare(password, user.password))) {
-      throw new UnauthorizedException('密码错误');
+      // 使用默认安全配置
+      const maxFailedAttempts = this.DEFAULT_MAX_FAILED_ATTEMPTS;
+      const lockDurationHours = this.DEFAULT_LOCK_DURATION_HOURS;
+      
+      // 增加失败次数
+      user.failedAttempts += 1;
+      user.lastFailedAttempt = new Date();
+      
+      // 检查是否需要锁定
+      if (user.failedAttempts >= maxFailedAttempts) {
+        user.isLocked = true;
+        user.lockedAt = new Date();
+        user.lockExpireTime = new Date(Date.now() + lockDurationHours * 60 * 60 * 1000);
+        
+        await this.logService.createLog({
+          userId: user.id,
+          username: user.username,
+          action: 'lock',
+          module: '认证',
+          description: `用户因密码错误超过${maxFailedAttempts}次被自动锁定`,
+        });
+      }
+      
+      await this.userRepository.save(user);
+      
+      const remainingAttempts = maxFailedAttempts - user.failedAttempts;
+      if (remainingAttempts > 0) {
+        throw new UnauthorizedException(`密码错误，还剩${remainingAttempts}次尝试机会`);
+      } else {
+        throw new UnauthorizedException('用户已锁定，请联系管理员解锁');
+      }
+    }
+    
+    // 登录成功，重置失败计数
+    if (user.failedAttempts > 0) {
+      user.failedAttempts = 0;
+      user.lastFailedAttempt = null;
+      await this.userRepository.save(user);
     }
     
     // 记录登录日志
@@ -120,6 +179,7 @@ export class AuthService {
       roleId: user.roleId,
       role: user.role ? { id: user.role.id, name: user.role.name } : null,
       createdAt: user.createdAt,
+      isLocked: user.isLocked,
     }));
   }
 
@@ -166,6 +226,116 @@ export class AuthService {
     return { success: true, message: 'User role updated' };
   }
 
+  async updateUserInfo(userId: number, updateData: { email?: string; password?: string; currentPassword?: string }) {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return { error: 'User not found' };
+    
+    const updates: string[] = [];
+    
+    if (updateData.email && updateData.email !== user.email) {
+      user.email = updateData.email;
+      updates.push('邮箱');
+    }
+    
+    if (updateData.password) {
+      // 验证原密码
+      if (!updateData.currentPassword) {
+        return { error: '请提供原密码' };
+      }
+      const passwordMatch = await bcrypt.compare(updateData.currentPassword, user.password);
+      if (!passwordMatch) {
+        return { error: '原密码错误' };
+      }
+      
+      user.password = await bcrypt.hash(updateData.password, 10);
+      updates.push('密码');
+    }
+    
+    await this.userRepository.save(user);
+    
+    // 记录更新日志
+    await this.logService.createLog({
+      userId: userId,
+      username: user.username,
+      action: 'update',
+      module: '用户管理',
+      description: `更新用户信息：${updates.join('、')}`,
+    });
+    
+    return { success: true, message: '用户信息更新成功' };
+  }
+
+  async resetPassword(userId: number, adminId: number = 1, adminUsername: string = 'admin') {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return { error: '用户不存在' };
+    
+    // 将密码重置为 123456
+    const defaultPassword = '123456';
+    user.password = await bcrypt.hash(defaultPassword, 10);
+    await this.userRepository.save(user);
+    
+    // 记录重置密码日志
+    await this.logService.createLog({
+      userId: adminId,
+      username: adminUsername,
+      action: 'update',
+      module: '用户管理',
+      description: `重置用户密码: ${user.username}`,
+    });
+    
+    return { success: true, message: '密码已重置为 123456' };
+  }
+
+  async lockUser(userId: number, adminId: number = 1, adminUsername: string = 'admin') {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return { error: '用户不存在' };
+    
+    if (user.isLocked) {
+      return { error: '用户已被锁定' };
+    }
+    
+    user.isLocked = true;
+    user.lockedAt = new Date();
+    user.lockExpireTime = null; // 手动锁定永不过期，除非手动解锁
+    await this.userRepository.save(user);
+    
+    await this.logService.createLog({
+      userId: adminId,
+      username: adminUsername,
+      action: 'lock',
+      module: '用户管理',
+      description: `手动锁定用户: ${user.username}`,
+    });
+    
+    return { success: true, message: '用户已被锁定' };
+  }
+
+  async unlockUser(userId: number, adminId: number = 1, adminUsername: string = 'admin') {
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return { error: '用户不存在' };
+    
+    if (!user.isLocked) {
+      return { error: '用户未被锁定' };
+    }
+    
+    user.isLocked = false;
+    user.lockedAt = null;
+    user.lockExpireTime = null;
+    user.failedAttempts = 0;
+    user.lastFailedAttempt = null;
+    await this.userRepository.save(user);
+    
+    await this.logService.createLog({
+      userId: adminId,
+      username: adminUsername,
+      action: 'unlock',
+      module: '用户管理',
+      description: `解锁用户: ${user.username}`,
+    });
+    
+    return { success: true, message: '用户已被解锁' };
+  }
+
   async deleteUser(userId: number) {
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user) return { error: 'User not found' };
@@ -174,21 +344,63 @@ export class AuthService {
     await queryRunner.startTransaction();
     
     try {
+      // 先获取用户的所有文档ID（使用QueryBuilder）
+      const documentIds = await queryRunner.manager.createQueryBuilder(Document, 'doc')
+        .select('doc.id')
+        .where('doc.userId = :userId', { userId })
+        .getRawMany()
+        .then(rows => rows.map(row => row.doc_id));
+      
+      // 如果有文档，先删除关联的数据
+      if (documentIds.length > 0) {
+        // 删除文件附件（使用SQL查询）
+        await queryRunner.query(`DELETE FROM file_attachment WHERE documentId IN (${documentIds.join(',')})`);
+        
+        // 删除笔记
+        await queryRunner.manager.delete(Note, { documentId: In(documentIds) });
+        
+        // 尝试删除Document和Tag的关联表记录
+        // 关联表名可能因TypeORM配置而异，这里使用try-catch处理
+        try {
+          // 尝试常见的关联表名
+          await queryRunner.query(`DELETE FROM document_tags WHERE documentId IN (${documentIds.join(',')})`);
+        } catch (e) {
+          try {
+            // 尝试另一种命名方式
+            await queryRunner.query(`DELETE FROM tags_document WHERE documentId IN (${documentIds.join(',')})`);
+          } catch (e2) {
+            // 如果关联表不存在，忽略这个错误
+            console.log('Document-Tag junction table not found or already cleaned');
+          }
+        }
+      }
+      
+      // 删除用户的文档
       await queryRunner.manager.delete(Document, { userId });
+      
+      // 删除用户的分类
       await queryRunner.manager.delete(Category, { userId });
+      
+      // 删除用户的标签
       await queryRunner.manager.delete(Tag, { userId });
+      
+      // 删除用户的配置
       await queryRunner.manager.delete(Config, { userId });
       
+      // 删除用户的日志记录
+      await queryRunner.manager.delete(Log, { userId });
+      
+      // 删除用户
       const result = await queryRunner.manager.delete(User, userId);
       await queryRunner.commitTransaction();
       
-      // 记录删除用户日志
+      // 记录删除用户日志（使用管理员账户）
       await this.logService.createLog({
-        userId: userId,
-        username: user.username,
+        userId: 1,
+        username: 'admin',
         action: 'delete',
         module: '用户管理',
-        description: '删除用户',
+        description: `删除用户: ${user.username}`,
       });
       
       return { success: result.affected > 0 };

@@ -45,6 +45,12 @@ export class CategoryController {
     return this.categoryService.update(userId, +id, category);
   }
 
+  @Get(':id/delete-info')
+  getDeleteInfo(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
+    return this.categoryService.getDeleteInfo(userId, +id);
+  }
+
   @Delete(':id')
   remove(@Req() req: Request, @Param('id') id: string) {
     const userId = req.user['id'];

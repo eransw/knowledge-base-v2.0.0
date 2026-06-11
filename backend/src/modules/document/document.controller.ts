@@ -29,6 +29,20 @@ const storage = diskStorage({
   },
 });
 
+// Multer 选项
+const multerOptions = {
+  storage,
+  limits: {
+    fileSize: 500 * 1024 * 1024, // 500MB 单个文件大小限制
+    files: 500, // 最多500个文件
+    // 不限制整体请求大小
+  },
+  fileFilter: (req: any, file: any, cb: any) => {
+    console.log('Multer fileFilter called:', file.originalname);
+    cb(null, true);
+  },
+};
+
 
 
 @Controller('documents')
@@ -68,6 +82,81 @@ export class DocumentController {
   search(@Req() req: Request, @Query('keyword') keyword: string) {
     const userId = req.user['id'];
     return this.documentService.search(userId, keyword);
+  }
+
+  @Post('batch-upload')
+  @UseInterceptors(FilesInterceptor('files', 100, multerOptions))
+  async batchUpload(@UploadedFiles() files: any[], @Req() req: Request) {
+    try {
+      console.log('=== Batch upload request received ===');
+      console.log('User:', req.user);
+      console.log('Files count:', files?.length || 0);
+      console.log('Request body keys:', Object.keys(req.body));
+      console.log('Request body:', req.body);
+      
+      if (!req.user || !req.user['id']) {
+        throw new Error('User not authenticated');
+      }
+      
+      const userId = req.user['id'];
+    
+      // 获取路径数组 - 尝试多种方式解析
+      const paths: string[] = [];
+      
+      // 方式1: 解析 paths[0], paths[1] 等格式
+      let key = 0;
+      while (req.body[`paths[${key}]`] !== undefined) {
+        paths.push(req.body[`paths[${key}]`]);
+        key++;
+      }
+      
+      // 方式2: 如果方式1失败，尝试解析 paths.0, paths.1 等格式
+      if (paths.length === 0) {
+        key = 0;
+        while (req.body[`paths.${key}`] !== undefined) {
+          paths.push(req.body[`paths.${key}`]);
+          key++;
+        }
+      }
+      
+      // 方式3: 如果 paths 本身是一个数组
+      if (paths.length === 0 && Array.isArray(req.body.paths)) {
+        paths.push(...req.body.paths);
+      }
+      
+      // 方式4: 从所有键中提取以 paths[ 开头的键
+      if (paths.length === 0) {
+        const allKeys = Object.keys(req.body);
+        for (const k of allKeys) {
+          if (k.startsWith('paths[')) {
+            paths.push(req.body[k]);
+          }
+        }
+      }
+      
+      console.log('Paths count:', paths.length);
+      console.log('Paths:', paths);
+      
+      // 获取父分类
+      let parentCategory = null;
+      if (req.body.parentCategoryId) {
+        const categoryId = parseInt(req.body.parentCategoryId, 10);
+        if (!isNaN(categoryId) && categoryId > 0) {
+          parentCategory = await this.categoryRepository.findOne({ where: { id: categoryId, userId } });
+        }
+      }
+      
+      console.log('Parent category:', parentCategory?.id || null);
+      
+      const result = await this.documentService.batchUpload(userId, files, paths, parentCategory);
+      console.log('Batch upload completed successfully:', result);
+      return result;
+    } catch (error: any) {
+      console.error('=== Batch upload error ===');
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      throw error;
+    }
   }
 
   @Post('upload')

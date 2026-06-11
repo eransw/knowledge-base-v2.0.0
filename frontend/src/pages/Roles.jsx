@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { cn } from '../lib/utils'
-import axios from 'axios'
+import axios from '../api/axios'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const MENU_ITEMS = [

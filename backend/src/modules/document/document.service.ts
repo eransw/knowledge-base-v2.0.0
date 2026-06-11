@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, IsNull } from 'typeorm';
 import { Document } from './document.entity';
 import { FileAttachment } from './file-attachment.entity';
 import { Category } from '../category/category.entity';
@@ -284,5 +284,221 @@ export class DocumentService {
     });
     
     return { filePath, filename, originalFilename };
+  }
+
+  async batchUpload(
+    userId: number, 
+    files: any[], 
+    paths: string[], 
+    parentCategory: Category | null
+  ): Promise<{ documents: Document[], categories: Category[] }> {
+    try {
+      console.log('=== batchUpload service called ===');
+      console.log('userId:', userId);
+      console.log('files count:', files?.length || 0);
+      console.log('paths count:', paths?.length || 0);
+      console.log('paths:', paths);
+      console.log('parentCategory:', parentCategory?.id || null);
+      
+      if (!files || files.length === 0) {
+        throw new Error('No files provided');
+      }
+      
+      const uploadDir = path.join(__dirname, '..', '..', '..', 'uploads');
+      
+      // 按路径分组文件
+      const pathMap: { [key: string]: { files: any[] } } = {};
+      
+      files.forEach((file, index) => {
+        console.log(`Processing file ${index}:`, file.originalname);
+        console.log(`File details:`, {
+          filename: file.filename,
+          path: file.path,
+          mimetype: file.mimetype,
+          size: file.size
+        });
+        
+        const fileKey = paths[index] || file.originalname;
+        console.log(`File key for index ${index}:`, fileKey);
+        
+        const parts = fileKey.split('/');
+        const fileName = parts.pop();
+        const directoryPath = parts.join('/');
+        
+        console.log(`Directory path:`, directoryPath);
+        console.log(`File name:`, fileName);
+        
+        if (!pathMap[directoryPath]) {
+          pathMap[directoryPath] = { files: [] };
+        }
+        
+        // 解码文件名 - 处理中文文件名乱码问题
+        let originalFilename = file.originalname;
+        try {
+          // 尝试解码 URL 编码的文件名
+          const decoded = decodeURIComponent(file.originalname);
+          // 如果解码后的字符串包含中文字符，则使用解码后的文件名
+          if (/[\u4e00-\u9fa5]/.test(decoded)) {
+            originalFilename = decoded;
+          } else {
+            // 尝试检测是否是 UTF-8 编码被错误解码的情况
+            const utf8Decoded = Buffer.from(file.originalname, 'latin1').toString('utf-8');
+            if (/[\u4e00-\u9fa5]/.test(utf8Decoded)) {
+              originalFilename = utf8Decoded;
+            }
+          }
+        } catch (e) {
+          console.log('Failed to decode filename, using original:', file.originalname);
+        }
+        
+        pathMap[directoryPath].files.push({
+          file,
+          originalFilename,
+          fileName: fileName || file.originalname
+        });
+      });
+
+      console.log('Path map:', Object.keys(pathMap));
+      
+      const createdCategories: Category[] = [];
+      const createdDocuments: Document[] = [];
+
+    // 递归创建分类和文档
+    const processPath = async (dirPath: string, parentCat: Category | null): Promise<Category | null> => {
+      if (!pathMap[dirPath]) return parentCat;
+      
+      const parts = dirPath.split('/').filter(p => p);
+      if (parts.length === 0) return parentCat;
+      
+      let currentParent = parentCat;
+      let currentPath = '';
+      
+      for (const part of parts) {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        
+        // 检查分类是否已存在
+        let category: Category | null;
+        if (currentParent) {
+          category = await this.categoryRepository.findOne({
+            where: { name: part, userId, parentId: currentParent.id }
+          });
+        } else {
+          // 使用 IsNull() 操作符来匹配 NULL 值
+          category = await this.categoryRepository.findOne({
+            where: { name: part, userId, parentId: IsNull() }
+          });
+        }
+        
+        // 如果不存在，创建分类
+        if (!category) {
+          category = this.categoryRepository.create({
+            name: part,
+            userId,
+            parent: currentParent
+          });
+          category = await this.categoryRepository.save(category);
+          createdCategories.push(category);
+        }
+        
+        currentParent = category;
+      }
+      
+      // 处理当前目录下的文件
+      const dirFiles = pathMap[dirPath];
+      if (dirFiles && dirFiles.files.length > 0) {
+        // 按文件名中的数字分组
+        const documentGroups: { [key: string]: any[] } = {};
+        
+        dirFiles.files.forEach(item => {
+          // 提取文件名中的数字作为分组标识
+          const match = item.fileName.match(/(\d+)/);
+          const groupNumber = match ? match[1] : 'default';
+          
+          if (!documentGroups[groupNumber]) {
+            documentGroups[groupNumber] = [];
+          }
+          documentGroups[groupNumber].push(item);
+        });
+        
+        // 为每个分组创建文档
+        for (const group of Object.values(documentGroups)) {
+          const firstFile = group[0];
+          // 从文件名中提取文档标题（去掉数字和扩展名）
+          const nameWithoutExt = firstFile.fileName.replace(/\.[^/.]+$/, '');
+          const cleanName = nameWithoutExt.replace(/\d+/g, '').trim() || firstFile.fileName.replace(/\.[^/.]+$/, '');
+          
+          // 创建文档
+          const document = this.documentRepository.create({
+            title: cleanName,
+            content: '',
+            userId,
+            category: currentParent
+          });
+          
+          // 处理附件
+          const attachments: FileAttachment[] = [];
+          for (const item of group) {
+            const file = item.file;
+            const filename = file.filename;
+            const filePath = file.path;
+            
+            // 尝试解析文本内容
+            if (file.mimetype.includes('text') || 
+                file.mimetype.includes('pdf') || 
+                file.mimetype.includes('word') ||
+                file.mimetype.includes('markdown')) {
+              const content = await this.parseFile(filePath, file.mimetype);
+              if (content) {
+                document.content += content + '\n\n';
+              }
+            }
+            
+            attachments.push({
+              filename,
+              originalFilename: item.originalFilename,
+              filePath,
+              fileType: file.mimetype,
+              fileSize: file.size,
+            } as FileAttachment);
+          }
+          
+          document.attachments = attachments;
+          const savedDocument = await this.documentRepository.save(document);
+          createdDocuments.push(savedDocument);
+        }
+      }
+      
+      return currentParent;
+    };
+
+    // 获取所有目录路径
+    const allPaths = Object.keys(pathMap);
+    
+    // 按路径长度排序，确保父目录先处理
+    allPaths.sort((a, b) => a.split('/').length - b.split('/').length);
+    
+    // 处理根目录文件（如果有）
+    if (pathMap['']) {
+      await processPath('', parentCategory);
+    }
+    
+    // 处理其他目录
+    for (const dirPath of allPaths) {
+      if (dirPath) {
+        await processPath(dirPath, parentCategory);
+      }
+    }
+    
+    console.log('=== batchUpload completed ===');
+    console.log('Created documents:', createdDocuments.length);
+    console.log('Created categories:', createdCategories.length);
+    
+    return { documents: createdDocuments, categories: createdCategories };
+    } catch (error: any) {
+      console.error('=== batchUpload service error ===');
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      throw error;
+    }
   }
 }
