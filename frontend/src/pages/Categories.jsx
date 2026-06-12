@@ -10,7 +10,9 @@ import {
   FolderTree,
   X,
   GripVertical,
-  Folder
+  Folder,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -65,7 +67,7 @@ function RootDropzone({ onDrop, isDark }) {
   )
 }
 
-function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, onEdit, onSave, onDelete, editCategory, isDark }) {
+function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, onEdit, onSave, onDelete, editCategory, isDark, onMoveUp, onMoveDown, isFirst, isLast }) {
   const {
     attributes,
     listeners,
@@ -198,6 +200,38 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  console.log('Move Up button clicked for item:', item.id, 'isFirst:', isFirst)
+                  onMoveUp(item.id)
+                }}
+                disabled={isFirst}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  isFirst 
+                    ? "opacity-30 cursor-not-allowed bg-gray-600" 
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                )}
+              >
+                <ArrowUp className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  console.log('Move Down button clicked for item:', item.id, 'isLast:', isLast)
+                  onMoveDown(item.id)
+                }}
+                disabled={isLast}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  isLast 
+                    ? "opacity-30 cursor-not-allowed bg-gray-500" 
+                    : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                )}
+              >
+                <ArrowDown className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -206,12 +240,13 @@ function SortableCategoryItem({ item, level, onToggle, onAddChild, isExpanded, o
   )
 }
 
-function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory, isDark }) {
+function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory, isDark, onMoveUp, onMoveDown }) {
   const renderTree = useCallback((items, level = 0) => {
     // 按照 order 字段排序
     const sortedItems = [...items].sort((a, b) => (a.order || 0) - (b.order || 0))
+    console.log('CategoryTree renderTree - level:', level, 'items count:', items.length, 'sortedItems:', sortedItems)
     
-    return sortedItems.map(item => (
+    return sortedItems.map((item, index) => (
       <div key={item.id}>
         <SortableCategoryItem
           item={item}
@@ -224,6 +259,10 @@ function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, o
           onDelete={onDelete}
           editCategory={editCategory}
           isDark={isDark}
+          onMoveUp={onMoveUp}
+          onMoveDown={onMoveDown}
+          isFirst={index === 0}
+          isLast={index === sortedItems.length - 1}
         />
         {item.children && item.children.length > 0 && expandedIds.includes(item.id) && (
           <div className="ml-4">
@@ -232,7 +271,7 @@ function CategoryTree({ categories, expandedIds, onToggle, onAddChild, onEdit, o
         )}
       </div>
     ))
-  }, [expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory])
+  }, [expandedIds, onToggle, onAddChild, onEdit, onSave, onDelete, editCategory, onMoveUp, onMoveDown])
 
   return renderTree(categories)
 }
@@ -303,7 +342,15 @@ export default function Categories() {
   )
 
   useEffect(() => {
-    fetchCategories()
+    fetchCategories().then(() => {
+      // 测试排序功能
+      if (categories.length > 1) {
+        console.log('Testing sort functionality...')
+        console.log('Categories data:', categories)
+        const flat = flattenCategories(categories)
+        console.log('Flat categories:', flat)
+      }
+    })
   }, [])
 
   async function fetchCategories() {
@@ -348,6 +395,72 @@ export default function Categories() {
       fetchCategories()
     } catch (error) {
       console.error('Edit category failed:', error)
+    }
+  }
+
+  async function handleMoveUp(categoryId) {
+    const flatCategories = flattenCategories(categories)
+    const currentCategory = flatCategories.find(cat => cat.id === categoryId)
+    
+    if (!currentCategory) return
+    
+    const currentParentId = currentCategory.parentId ?? null
+    const siblings = flatCategories.filter(
+      cat => (cat.parentId ?? null) === currentParentId
+    ).sort((a, b) => (a.order || 0) - (b.order || 0))
+    
+    const currentIndex = siblings.findIndex(sib => sib.id === categoryId)
+    if (currentIndex <= 0) return
+    
+    const prevSibling = siblings[currentIndex - 1]
+    
+    try {
+      // 如果两个分类的order值相同，先给所有同级分类重新分配唯一的order值
+      if (currentCategory.order === prevSibling.order) {
+        for (let i = 0; i < siblings.length; i++) {
+          await axios.put(`/api/categories/${siblings[i].id}`, { order: i * 10 })
+        }
+      } else {
+        // 交换两个分类的order值
+        await axios.put(`/api/categories/${categoryId}`, { order: prevSibling.order })
+        await axios.put(`/api/categories/${prevSibling.id}`, { order: currentCategory.order })
+      }
+      fetchCategories()
+    } catch (error) {
+      console.error('Failed to move category up:', error.response?.data || error.message)
+    }
+  }
+
+  async function handleMoveDown(categoryId) {
+    const flatCategories = flattenCategories(categories)
+    const currentCategory = flatCategories.find(cat => cat.id === categoryId)
+    
+    if (!currentCategory) return
+    
+    const currentParentId = currentCategory.parentId ?? null
+    const siblings = flatCategories.filter(
+      cat => (cat.parentId ?? null) === currentParentId
+    ).sort((a, b) => (a.order || 0) - (b.order || 0))
+    
+    const currentIndex = siblings.findIndex(sib => sib.id === categoryId)
+    if (currentIndex >= siblings.length - 1) return
+    
+    const nextSibling = siblings[currentIndex + 1]
+    
+    try {
+      // 如果两个分类的order值相同，先给所有同级分类重新分配唯一的order值
+      if (currentCategory.order === nextSibling.order) {
+        for (let i = 0; i < siblings.length; i++) {
+          await axios.put(`/api/categories/${siblings[i].id}`, { order: i * 10 })
+        }
+      } else {
+        // 交换两个分类的order值
+        await axios.put(`/api/categories/${categoryId}`, { order: nextSibling.order })
+        await axios.put(`/api/categories/${nextSibling.id}`, { order: currentCategory.order })
+      }
+      fetchCategories()
+    } catch (error) {
+      console.error('Failed to move category down:', error.response?.data || error.message)
     }
   }
 
@@ -733,6 +846,8 @@ export default function Categories() {
                   onDelete={handleDelete}
                   editCategory={editCategory}
                   isDark={isDark}
+                  onMoveUp={handleMoveUp}
+                  onMoveDown={handleMoveDown}
                 />
               </div>
 

@@ -33,8 +33,19 @@ export class CategoryService {
 
   async create(userId: number, category: Partial<Category> & { parentId?: number }): Promise<Category> {
     const { parentId, ...rest } = category;
+    
+    // 获取同级分类的最大order值，新分类应该排在最后
+    const siblings = await this.categoryRepository.find({
+      where: { userId, parentId: parentId ?? null },
+    });
+    const maxOrder = siblings.length > 0 
+      ? Math.max(...siblings.map(s => s.order || 0)) 
+      : 0;
+    const newOrder = maxOrder + 10; // 新分类排在最后
+    
     const newCategory = this.categoryRepository.create({
       ...rest,
+      order: newOrder,
       userId,
       parent: parentId ? { id: parentId } as Category : null,
     });
@@ -42,19 +53,23 @@ export class CategoryService {
   }
 
   async update(userId: number, id: number, category: Partial<Category> & { parentId?: number }): Promise<Category> {
+    console.log('CategoryService.update called with:', { userId, id, category });
     const { parentId, order, ...rest } = category;
     const updateData: any = { ...rest };
     
     // 处理order值，过滤NaN和无效值
     if (order !== undefined && !isNaN(order)) {
       updateData.order = order;
+      console.log('Updating order to:', order);
     }
     
     if (parentId !== undefined) {
       updateData.parent = parentId ? { id: parentId } as Category : null;
     }
     
-    await this.categoryRepository.update({ id, userId }, updateData);
+    console.log('Final updateData:', updateData);
+    const result = await this.categoryRepository.update({ id, userId }, updateData);
+    console.log('Update result:', result);
     return this.findOne(userId, id);
   }
 

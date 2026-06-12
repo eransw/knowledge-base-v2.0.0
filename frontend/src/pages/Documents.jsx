@@ -69,7 +69,6 @@ export default function Documents() {
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploadDescription, setUploadDescription] = useState('')
   const [selectedTags, setSelectedTags] = useState([])
-  const [selectedTag, setSelectedTag] = useState(null)
   // 批量上传相关状态
   const [showBatchUploadModal, setShowBatchUploadModal] = useState(false)
   const [batchUploadFiles, setBatchUploadFiles] = useState([])
@@ -81,13 +80,13 @@ export default function Documents() {
 
   useEffect(() => {
     const categoryParam = searchParams.get('category')
-    const tagParam = searchParams.get('tag')
+    const tagIdsParam = searchParams.get('tagIds')
     
     if (categoryParam) {
       setSelectedCategory(parseInt(categoryParam))
     }
-    if (tagParam) {
-      setSelectedTag(parseInt(tagParam))
+    if (tagIdsParam) {
+      setSelectedTags(tagIdsParam.split(',').map(id => parseInt(id)))
     }
     
     fetchDocuments()
@@ -98,15 +97,15 @@ export default function Documents() {
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedCategory) params.set('categoryId', selectedCategory)
-    if (selectedTag) params.set('tag', selectedTag)
+    if (selectedTags.length > 0) params.set('tagIds', selectedTags.join(','))
     setSearchParams(params)
-  }, [selectedCategory, selectedTag, setSearchParams])
+  }, [selectedCategory, selectedTags, setSearchParams])
 
   async function fetchDocuments() {
     try {
       const params = new URLSearchParams()
       if (selectedCategory) params.set('categoryId', selectedCategory)
-      if (selectedTag) params.set('tag', selectedTag)
+      if (selectedTags.length > 0) params.set('tagIds', selectedTags.join(','))
       
       const url = params.toString() ? `/api/documents?${params.toString()}` : '/api/documents'
       const response = await axios.get(url)
@@ -591,7 +590,6 @@ export default function Documents() {
         <button
           onClick={() => {
             setSelectedCategory(selectedCategory === category.id ? null : category.id)
-            setSelectedTag(null)
           }}
           className={cn(
             "w-full text-left px-3 py-3 rounded-xl transition-all duration-300 flex items-center gap-3 group",
@@ -923,11 +921,10 @@ export default function Documents() {
                 <button
                   onClick={() => {
                     setSelectedCategory(null)
-                    setSelectedTag(null)
                   }}
                   className={cn(
                     "w-full text-left px-4 py-3.5 rounded-xl transition-all duration-300 flex items-center gap-3",
-                    !selectedCategory && !selectedTag
+                    !selectedCategory
                       ? isDark 
                         ? cn('bg-gradient-to-r', cardColors.bgFrom, cardColors.bgTo, cardColors.text, 'shadow-lg', cardColors.shadow, `border ${cardColors.border}`)
                         : 'bg-gradient-to-r from-blue-50 via-blue-100 to-indigo-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200/50'
@@ -938,7 +935,7 @@ export default function Documents() {
                 >
                   <div className={cn(
                     "w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300",
-                    !selectedCategory && !selectedTag
+                    !selectedCategory
                       ? isDark 
                         ? cn("bg-gradient-to-br", cardColors.bgFrom.replace('800', '500').replace('95', '30').replace('90', '20'), cardColors.bgTo.replace('95', '500').replace('90', '20').replace('800', '600'))
                         : "bg-blue-100"
@@ -946,7 +943,7 @@ export default function Documents() {
                   )}>
                     <FolderOpen className={cn(
                       "w-4.5 h-4.5",
-                      !selectedCategory && !selectedTag
+                      !selectedCategory
                         ? isDark 
                           ? cardColors.text.replace('300', '400')
                           : "text-blue-500"
@@ -956,7 +953,7 @@ export default function Documents() {
                   <span className="flex-1 text-sm font-medium">全部文档</span>
                   <span className={cn(
                     "text-xs px-3 py-1.5 rounded-full font-medium",
-                    !selectedCategory && !selectedTag
+                    !selectedCategory && selectedTags.length === 0
                       ? isDark 
                         ? cn("bg-gradient-to-r", cardColors.bgFrom.replace('800', '500').replace('95', '30').replace('90', '20'), cardColors.bgTo.replace('95', '500').replace('90', '20').replace('800', '600'), cardColors.text.replace('300', '200'))
                         : "bg-blue-100 text-blue-600"
@@ -1006,15 +1003,30 @@ export default function Documents() {
               <CardContent className="pt-4 px-3">
                 <div className="flex flex-wrap gap-2">
                   {tags.map(tag => {
-                    const tagCount = allDocuments.filter(doc => doc.tags?.some(t => t.id === tag.id)).length
-                    const isSelected = selectedTag === tag.id
+                    let filteredDocsForTag = allDocuments
+                    if (selectedCategory) {
+                      const findCategory = (items) => {
+                        for (const item of items) {
+                          if (item.id === selectedCategory) return item
+                          if (item.children) {
+                            const found = findCategory(item.children)
+                            if (found) return found
+                          }
+                        }
+                        return null
+                      }
+                      const category = findCategory(categories)
+                      if (category) {
+                        const relatedIds = getCategoryIdsWithChildren(category)
+                        filteredDocsForTag = allDocuments.filter(doc => relatedIds.includes(doc.category?.id))
+                      }
+                    }
+                    const tagCount = filteredDocsForTag.filter(doc => doc.tags?.some(t => t.id === tag.id)).length
+                    const isSelected = selectedTags.includes(tag.id)
                     return (
                       <button
                         key={tag.id}
-                        onClick={() => {
-                          setSelectedTag(isSelected ? null : tag.id)
-                          setSelectedCategory(null)
-                        }}
+                        onClick={() => toggleTag(tag.id)}
                         className={cn(
                           "px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 flex items-center gap-2",
                           isSelected

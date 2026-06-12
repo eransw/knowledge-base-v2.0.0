@@ -14,6 +14,7 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { LogService } from '../log/log.service';
+import { ConfigService } from '../config/config.service';
 
 @Injectable()
 export class AuthService {
@@ -28,7 +29,20 @@ export class AuthService {
     private roleRepository: Repository<Role>,
     private jwtService: JwtService,
     private logService: LogService,
+    private configService: ConfigService,
   ) {}
+
+  // 获取安全配置
+  private async getSecurityConfig() {
+    // 从系统配置中读取（userId=1 表示系统配置）
+    const maxFailedAttemptsStr = await this.configService.get('security.passwordErrorLimit', 1);
+    const lockDurationHoursStr = await this.configService.get('security.lockDurationHours', 1);
+    
+    const maxFailedAttempts = maxFailedAttemptsStr ? parseInt(maxFailedAttemptsStr, 10) : this.DEFAULT_MAX_FAILED_ATTEMPTS;
+    const lockDurationHours = lockDurationHoursStr ? parseInt(lockDurationHoursStr, 10) : this.DEFAULT_LOCK_DURATION_HOURS;
+    
+    return { maxFailedAttempts, lockDurationHours };
+  }
 
   async register(registerDto: RegisterDto) {
     const { username, email, password } = registerDto;
@@ -95,9 +109,8 @@ export class AuthService {
     
     // 再检查密码是否正确
     if (!(await bcrypt.compare(password, user.password))) {
-      // 使用默认安全配置
-      const maxFailedAttempts = this.DEFAULT_MAX_FAILED_ATTEMPTS;
-      const lockDurationHours = this.DEFAULT_LOCK_DURATION_HOURS;
+      // 从系统配置中获取安全设置
+      const { maxFailedAttempts, lockDurationHours } = await this.getSecurityConfig();
       
       // 增加失败次数
       user.failedAttempts += 1;

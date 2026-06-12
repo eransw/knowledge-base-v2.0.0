@@ -64,10 +64,23 @@ export default function Tags() {
   const [draggedTag, setDraggedTag] = useState(null)
   const [dragOverIndex, setDragOverIndex] = useState(null)
   const dragCounter = useRef(0)
+  const editAreaRef = useRef(null)
 
   useEffect(() => {
     fetchTags()
   }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (editTag && editAreaRef.current && !editAreaRef.current.contains(event.target)) {
+        handleEdit(editTag.id)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [editTag])
 
   async function fetchTags() {
     try {
@@ -236,12 +249,11 @@ export default function Tags() {
                       >
                         <Tag className="w-4 h-4" />
                         {editTag?.id === tag.id ? (
-                          <>
+                          <div ref={editAreaRef}>
                             <Input
                                 type="text"
                                 value={editTag.name}
                                 onChange={(e) => setEditTag({ ...editTag, name: e.target.value })}
-                                onBlur={() => handleEdit(tag.id)}
                                 className={cn("w-20 h-8 px-2", inputClass(isDark))}
                                 autoFocus
                               />
@@ -261,12 +273,14 @@ export default function Tags() {
                                 type="color"
                                 value={editTag.color}
                                 onChange={(e) => {
+                                  e.stopPropagation()
                                   setEditTag({ ...editTag, color: e.target.value })
                                 }}
+                                onClick={(e) => e.stopPropagation()}
                                 className="w-6 h-6 rounded cursor-pointer border border-gray-300"
                               />
                             </div>
-                          </>
+                          </div>
                         ) : (
                           <span className="font-medium">{tag.name}</span>
                         )}
