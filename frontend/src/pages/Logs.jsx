@@ -204,7 +204,7 @@ export default function LogsPage() {
             variant="outline"
             className={cn(
               "shadow-lg rounded-xl",
-              isDark ? "border-slate-700 hover:bg-slate-800" : "border-gray-200 hover:bg-gray-50"
+              isDark ? "border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white" : "border-gray-200 hover:bg-gray-50"
             )}
           >
             <Download className="w-4 h-4 mr-2" />
@@ -214,8 +214,8 @@ export default function LogsPage() {
             onClick={() => setShowClearDialog(true)}
             variant="outline"
             className={cn(
-              "shadow-lg rounded-xl text-red-500",
-              isDark ? "border-red-700 hover:bg-red-900/20" : "border-red-200 hover:bg-red-50"
+              "shadow-lg rounded-xl",
+              isDark ? "border-red-600 text-red-400 hover:bg-red-900/20" : "border-red-200 text-red-500 hover:bg-red-50"
             )}
           >
             <Trash2 className="w-4 h-4 mr-2" />
@@ -327,7 +327,7 @@ export default function LogsPage() {
                   variant="outline"
                   className={cn(
                     "shadow-lg rounded-xl",
-                    isDark ? "border-slate-700 hover:bg-slate-800" : "border-gray-200 hover:bg-gray-50"
+                    isDark ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-gray-200 hover:bg-gray-50"
                   )}
                 >
                   <RefreshCw className="w-4 h-4" />
@@ -459,7 +459,10 @@ export default function LogsPage() {
                       }}
                       variant="ghost"
                       size="sm"
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      className={cn(
+                        "text-red-500 hover:text-red-400",
+                        isDark ? "hover:bg-red-900/30" : "hover:bg-red-50"
+                      )}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -482,7 +485,7 @@ export default function LogsPage() {
                   variant="outline"
                   className={cn(
                     "rounded-lg",
-                    isDark ? "border-slate-700 hover:bg-slate-800" : "border-gray-200 hover:bg-gray-50"
+                    isDark ? "border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white disabled:border-slate-700 disabled:text-slate-600" : "border-gray-200 hover:bg-gray-50 disabled:text-gray-400"
                   )}
                 >
                   上一页
@@ -493,7 +496,7 @@ export default function LogsPage() {
                   variant="outline"
                   className={cn(
                     "rounded-lg",
-                    isDark ? "border-slate-700 hover:bg-slate-800" : "border-gray-200 hover:bg-gray-50"
+                    isDark ? "border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white disabled:border-slate-700 disabled:text-slate-600" : "border-gray-200 hover:bg-gray-50 disabled:text-gray-400"
                   )}
                 >
                   下一页
