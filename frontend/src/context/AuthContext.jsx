@@ -58,7 +58,7 @@ export function AuthProvider({ children }) {
       
       return { success: true }
     } catch (error) {
-      console.error('Login failed:', error)
+      // 登录失败是预期的业务逻辑，不打印错误到控制台
       // 返回后端的错误消息
       const errorMessage = error.response?.data?.message || '登录失败'
       return { success: false, message: errorMessage }

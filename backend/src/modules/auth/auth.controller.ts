@@ -27,6 +27,21 @@ export class AuthController {
     return this.authService.updateTheme(userId, body.theme);
   }
 
+  @Put('security-config')
+  @UseGuards(AuthGuard('jwt'))
+  async updateSecurityConfig(@Req() req: Request, @Body() body: { maxFailedAttempts?: number; lockDuration?: number; lockDurationUnit?: string }) {
+    const userId = req.user['id'];
+    return this.authService.updateSecurityConfig(userId, body);
+  }
+
+  @Put('users/security-config')
+  @UseGuards(AuthGuard('jwt'))
+  async updateUsersSecurityConfig(@Req() req: Request, @Body() body: { userIds: number[]; maxFailedAttempts?: number; lockDuration?: number; lockDurationUnit?: string }) {
+    const adminId = req.user['id'];
+    const adminUsername = req.user['username'];
+    return this.authService.updateUsersSecurityConfig(body.userIds, body, adminId, adminUsername);
+  }
+
   @Get('users')
   @UseGuards(AuthGuard('jwt'))
   async getAllUsers() {

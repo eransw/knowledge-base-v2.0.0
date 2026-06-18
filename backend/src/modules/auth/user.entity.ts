@@ -24,6 +24,16 @@ export class User {
 
   @Column({ nullable: true })
   roleId: number;
+  
+  // 安全配置字段
+  @Column({ default: 3 })
+  maxFailedAttempts: number;
+  
+  @Column({ default: 2 })
+  lockDuration: number;
+  
+  @Column({ default: 'hours' })
+  lockDurationUnit: string;
 
   @Column({ type: 'text', nullable: true })
   menuOrder: string;

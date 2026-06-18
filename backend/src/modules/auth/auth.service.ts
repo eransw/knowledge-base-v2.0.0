@@ -20,7 +20,8 @@ import { ConfigService } from '../config/config.service';
 export class AuthService {
   // 默认安全配置
   private readonly DEFAULT_MAX_FAILED_ATTEMPTS = 3;
-  private readonly DEFAULT_LOCK_DURATION_HOURS = 24;
+  private readonly DEFAULT_LOCK_DURATION = 24;
+  private readonly DEFAULT_LOCK_DURATION_UNIT = 'hours';
 
   constructor(
     @InjectRepository(User)
@@ -32,16 +33,27 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
-  // 获取安全配置
-  private async getSecurityConfig() {
-    // 从系统配置中读取（userId=1 表示系统配置）
-    const maxFailedAttemptsStr = await this.configService.get('security.passwordErrorLimit', 1);
-    const lockDurationHoursStr = await this.configService.get('security.lockDurationHours', 1);
+  // 获取安全配置（从用户实体读取）
+  private getSecurityConfig(user: User) {
+    // 使用用户自己的安全配置，若未设置则使用默认值
+    const maxFailedAttempts = user.maxFailedAttempts || this.DEFAULT_MAX_FAILED_ATTEMPTS;
+    const lockDuration = user.lockDuration || this.DEFAULT_LOCK_DURATION;
+    const lockDurationUnit = user.lockDurationUnit || this.DEFAULT_LOCK_DURATION_UNIT;
     
-    const maxFailedAttempts = maxFailedAttemptsStr ? parseInt(maxFailedAttemptsStr, 10) : this.DEFAULT_MAX_FAILED_ATTEMPTS;
-    const lockDurationHours = lockDurationHoursStr ? parseInt(lockDurationHoursStr, 10) : this.DEFAULT_LOCK_DURATION_HOURS;
-    
-    return { maxFailedAttempts, lockDurationHours };
+    return { maxFailedAttempts, lockDuration, lockDurationUnit };
+  }
+
+  // 根据单位和时长计算毫秒数
+  private getLockDurationMs(duration: number, unit: string): number {
+    switch (unit) {
+      case 'seconds':
+        return duration * 1000;
+      case 'minutes':
+        return duration * 60 * 1000;
+      case 'hours':
+      default:
+        return duration * 60 * 60 * 1000;
+    }
   }
 
   async register(registerDto: RegisterDto) {
@@ -110,7 +122,7 @@ export class AuthService {
     // 再检查密码是否正确
     if (!(await bcrypt.compare(password, user.password))) {
       // 从系统配置中获取安全设置
-      const { maxFailedAttempts, lockDurationHours } = await this.getSecurityConfig();
+      const { maxFailedAttempts, lockDuration, lockDurationUnit } = this.getSecurityConfig(user);
       
       // 增加失败次数
       user.failedAttempts += 1;
@@ -120,7 +132,8 @@ export class AuthService {
       if (user.failedAttempts >= maxFailedAttempts) {
         user.isLocked = true;
         user.lockedAt = new Date();
-        user.lockExpireTime = new Date(Date.now() + lockDurationHours * 60 * 60 * 1000);
+        const lockDurationMs = this.getLockDurationMs(lockDuration, lockDurationUnit);
+        user.lockExpireTime = new Date(Date.now() + lockDurationMs);
         
         await this.logService.createLog({
           userId: user.id,
@@ -172,7 +185,10 @@ export class AuthService {
           id: user.role.id, 
           name: user.role.name,
           permissions: user.role.permissions 
-        } : null 
+        } : null,
+        maxFailedAttempts: user.maxFailedAttempts,
+        lockDuration: user.lockDuration,
+        lockDurationUnit: user.lockDurationUnit,
       },
     };
   }
@@ -180,6 +196,31 @@ export class AuthService {
   async updateTheme(userId: number, theme: string) {
     await this.userRepository.update(userId, { theme });
     return { success: true, message: '主题更新成功' };
+  }
+
+  async updateSecurityConfig(userId: number, config: { maxFailedAttempts?: number; lockDuration?: number; lockDurationUnit?: string }) {
+    await this.userRepository.update(userId, config);
+    return { success: true, message: '安全配置更新成功' };
+  }
+
+  async updateUsersSecurityConfig(userIds: number[], config: { maxFailedAttempts?: number; lockDuration?: number; lockDurationUnit?: string }, adminId: number, adminUsername: string) {
+    const updateConfig = {
+      maxFailedAttempts: config.maxFailedAttempts,
+      lockDuration: config.lockDuration,
+      lockDurationUnit: config.lockDurationUnit,
+    };
+    await this.userRepository.update(userIds, updateConfig);
+    
+    // 记录批量更新日志
+    await this.logService.createLog({
+      userId: adminId,
+      username: adminUsername,
+      action: 'update',
+      module: '用户管理',
+      description: `管理员批量更新 ${userIds.length} 个用户的安全配置`,
+    });
+    
+    return { success: true, message: `成功更新 ${userIds.length} 个用户的安全配置` };
   }
 
   async getAllUsers() {
@@ -193,6 +234,9 @@ export class AuthService {
       role: user.role ? { id: user.role.id, name: user.role.name } : null,
       createdAt: user.createdAt,
       isLocked: user.isLocked,
+      maxFailedAttempts: user.maxFailedAttempts,
+      lockDuration: user.lockDuration,
+      lockDurationUnit: user.lockDurationUnit,
     }));
   }
 
@@ -216,6 +260,9 @@ export class AuthService {
       role: user.role ? { id: user.role.id, name: user.role.name, permissions: user.role.permissions } : null,
       menuOrder: user.menuOrder ? JSON.parse(user.menuOrder) : null,
       createdAt: user.createdAt,
+      maxFailedAttempts: user.maxFailedAttempts,
+      lockDuration: user.lockDuration,
+      lockDurationUnit: user.lockDurationUnit,
     };
   }
 

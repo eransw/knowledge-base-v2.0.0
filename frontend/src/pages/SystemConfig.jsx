@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Save, RotateCcw, CheckCircle, Palette, GripVertical, ArrowUp, ArrowDown, RefreshCw, Shield } from 'lucide-react'
+import { Settings, Save, RotateCcw, CheckCircle, Palette, GripVertical, ArrowUp, ArrowDown, RefreshCw, Shield, Users, User } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -94,10 +94,20 @@ export default function SystemConfig() {
   })
   const [securityConfigs, setSecurityConfigs] = useState({
     maxFailedAttempts: '3',
-    lockDurationHours: '24',
+    lockDuration: '24',
+    lockDurationUnit: 'hours',
   })
   const [securitySaved, setSecuritySaved] = useState(false)
   const [saved, setSaved] = useState(false)
+  
+  // 批量设置安全配置相关状态
+  const [users, setUsers] = useState([])
+  const [selectedUserIds, setSelectedUserIds] = useState([])
+  const [showBatchSecurityConfigModal, setShowBatchSecurityConfigModal] = useState(false)
+  const [batchMaxFailedAttempts, setBatchMaxFailedAttempts] = useState(3)
+  const [batchLockDuration, setBatchLockDuration] = useState(2)
+  const [batchLockDurationUnit, setBatchLockDurationUnit] = useState('hours')
+  const [batchSaved, setBatchSaved] = useState(false)
 
   useEffect(() => {
     // 从 context 获取已保存的配置数据
@@ -109,14 +119,25 @@ export default function SystemConfig() {
         siteName: config.siteName || prev.siteName,
         copyright: config.copyright || prev.copyright,
       }))
-      // 获取安全配置数据
-      setSecurityConfigs(prev => ({
-        ...prev,
-        maxFailedAttempts: config['security.maxFailedAttempts'] || prev.maxFailedAttempts,
-        lockDurationHours: config['security.lockDurationHours'] || prev.lockDurationHours,
-      }))
     }
   }, [config])
+
+  useEffect(() => {
+    // 从当前用户获取安全配置（优先使用用户级配置）
+    if (user) {
+      setSecurityConfigs(prev => ({
+        ...prev,
+        maxFailedAttempts: user.maxFailedAttempts?.toString() || prev.maxFailedAttempts,
+        lockDuration: user.lockDuration?.toString() || prev.lockDuration,
+        lockDurationUnit: user.lockDurationUnit || prev.lockDurationUnit,
+      }))
+    }
+  }, [user])
+
+  useEffect(() => {
+    // 页面加载时自动获取用户列表
+    fetchUsers()
+  }, [])
 
   useEffect(() => {
     const savedOrder = user?.menuOrder
@@ -203,18 +224,75 @@ export default function SystemConfig() {
 
   const handleSecuritySave = async () => {
     try {
-      await axios.post('/api/config', { 
-        key: 'security.maxFailedAttempts', 
-        value: securityConfigs.maxFailedAttempts 
+      const newMaxFailedAttempts = parseInt(securityConfigs.maxFailedAttempts) || 3
+      const newLockDuration = parseInt(securityConfigs.lockDuration) || 2
+      const newLockDurationUnit = securityConfigs.lockDurationUnit || 'hours'
+      
+      await axios.put('/api/auth/security-config', { 
+        maxFailedAttempts: newMaxFailedAttempts,
+        lockDuration: newLockDuration,
+        lockDurationUnit: newLockDurationUnit
       })
-      await axios.post('/api/config', { 
-        key: 'security.lockDurationHours', 
-        value: securityConfigs.lockDurationHours 
-      })
+      
+      // 刷新用户信息，确保安全配置更新
+      await refreshUser()
+      
       setSecuritySaved(true)
       setTimeout(() => setSecuritySaved(false), 3000)
     } catch (error) {
       console.error('Failed to save security configs:', error)
+    }
+  }
+
+  // 获取用户列表（用于批量设置）
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get('/api/auth/users')
+      setUsers(response.data)
+    } catch (error) {
+      console.error('Failed to fetch users:', error)
+    }
+  }
+
+  // 切换用户选择
+  const toggleSelectUser = (userId) => {
+    setSelectedUserIds(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    )
+  }
+
+  // 全选用户
+  const selectAllUsers = () => {
+    setSelectedUserIds(users.map(user => user.id))
+  }
+
+  // 取消全选
+  const deselectAllUsers = () => {
+    setSelectedUserIds([])
+  }
+
+  // 打开批量设置模态框
+  const openBatchSecurityConfigModal = () => {
+    setShowBatchSecurityConfigModal(true)
+  }
+
+  // 处理批量设置安全配置
+  const handleBatchSecurityConfig = async () => {
+    try {
+      await axios.put('/api/auth/users/security-config', {
+        userIds: selectedUserIds,
+        maxFailedAttempts: batchMaxFailedAttempts,
+        lockDuration: batchLockDuration,
+        lockDurationUnit: batchLockDurationUnit
+      })
+      setShowBatchSecurityConfigModal(false)
+      setSelectedUserIds([])
+      setBatchSaved(true)
+      setTimeout(() => setBatchSaved(false), 3000)
+    } catch (error) {
+      console.error('Failed to update batch security config:', error)
     }
   }
 
@@ -625,17 +703,33 @@ export default function SystemConfig() {
           </div>
           <div className="space-y-2">
             <Label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>
-              自动解锁时间（小时）
+              自动解锁时间
             </Label>
-            <Input
-              type="number"
-              min="1"
-              max="168"
-              value={securityConfigs.lockDurationHours || ''}
-              onChange={(e) => handleSecurityChange('lockDurationHours', e.target.value)}
-              placeholder="请输入自动解锁时间"
-              className={cn(inputClass(isDark, '', currentTheme), "h-12 text-base w-32")}
-            />
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min="1"
+                max={securityConfigs.lockDurationUnit === 'hours' ? 168 : securityConfigs.lockDurationUnit === 'minutes' ? 10080 : 604800}
+                value={securityConfigs.lockDuration || ''}
+                onChange={(e) => handleSecurityChange('lockDuration', e.target.value)}
+                placeholder="请输入自动解锁时间"
+                className={cn(inputClass(isDark, '', currentTheme), "h-12 text-base w-32")}
+              />
+              <select
+                value={securityConfigs.lockDurationUnit || 'hours'}
+                onChange={(e) => handleSecurityChange('lockDurationUnit', e.target.value)}
+                className={cn(
+                  "h-12 px-3 rounded-md border text-base appearance-none cursor-pointer outline-none",
+                  isDark 
+                    ? "bg-slate-800/80 border-slate-600/40 text-white focus:border-cyan-500/50"
+                    : "bg-white border-slate-200 text-slate-900 focus:border-blue-400"
+                )}
+              >
+                <option value="hours">小时</option>
+                <option value="minutes">分钟</option>
+                <option value="seconds">秒</option>
+              </select>
+            </div>
             <p className={cn("text-sm", textClass('muted', isDark, currentTheme))}>
               用户被自动锁定后，经过此时间将自动解锁，默认值为 24 小时
             </p>
@@ -670,8 +764,242 @@ export default function SystemConfig() {
               保存安全配置
             </Button>
           </div>
+          
+          {/* 批量设置安全配置 - 仅管理员可见 */}
+          {user?.role?.name === '系统管理员' && (
+          <div className={cn("border-t pt-6", isDark ? "border-slate-700/40" : "border-gray-200")}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users className={cn("w-5 h-5", isDark ? "text-cyan-400" : "text-blue-500")} />
+                <h3 className={cn("font-semibold", textClass('secondary', isDark, currentTheme))}>
+                  批量设置用户安全配置
+                </h3>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => { fetchUsers(); setSelectedUserIds([]); }}
+                className={cn(
+                  "flex items-center gap-2",
+                  isDark && isSpecialTheme ? cn(cardColors.border, `text-${gradientColors.accent}-400`) : isDark && "border-slate-600/50 hover:bg-slate-700/30 text-gray-200"
+                )}
+              >
+                <RefreshCw className="w-4 h-4" />
+                刷新用户列表
+              </Button>
+            </div>
+            
+            {users.length > 0 && (
+              <div className="space-y-3">
+                {/* 全选按钮 */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={selectedUserIds.length === users.length ? deselectAllUsers : selectAllUsers}
+                    className={cn(
+                      "flex items-center gap-2 text-sm font-medium cursor-pointer",
+                      isDark ? "text-cyan-400 hover:text-cyan-300" : "text-blue-600 hover:text-blue-700"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUserIds.length === users.length && users.length > 0}
+                      onChange={(e) => e.target.checked ? selectAllUsers() : deselectAllUsers()}
+                      className={cn(
+                        "w-4 h-4 rounded border-2 cursor-pointer",
+                        isDark ? "border-slate-500 bg-slate-700" : "border-gray-300"
+                      )}
+                    />
+                    {selectedUserIds.length === users.length ? '取消全选' : '全选'}
+                  </button>
+                  <span className={cn("text-sm", textClass('muted', isDark, currentTheme))}>
+                    已选择 {selectedUserIds.length} / {users.length} 个用户
+                  </span>
+                </div>
+                
+                {/* 用户列表 */}
+                <div className={cn(
+                  "max-h-64 overflow-y-auto rounded-lg border",
+                  isDark ? "border-slate-700/40 bg-slate-800/30" : "border-gray-200 bg-gray-50"
+                )}>
+                  {users.map(user => (
+                    <div
+                      key={user.id}
+                      onClick={() => toggleSelectUser(user.id)}
+                      className={cn(
+                        "flex items-center gap-3 p-3 cursor-pointer transition-colors",
+                        selectedUserIds.includes(user.id)
+                          ? isDark ? "bg-cyan-500/10 border-l-2 border-cyan-500" : "bg-blue-50 border-l-2 border-blue-500"
+                          : isDark ? "hover:bg-slate-700/30" : "hover:bg-gray-100",
+                        "border-b last:border-b-0",
+                        isDark ? "border-slate-700/40" : "border-gray-200"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedUserIds.includes(user.id)}
+                        onChange={(e) => { e.stopPropagation(); toggleSelectUser(user.id); }}
+                        className={cn(
+                          "w-4 h-4 rounded border-2 cursor-pointer",
+                          isDark ? "border-slate-500 bg-slate-700" : "border-gray-300"
+                        )}
+                      />
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center",
+                        isDark ? "bg-cyan-500/20" : "bg-blue-100"
+                      )}>
+                        <User className={cn("w-4 h-4", isDark ? "text-cyan-400" : "text-blue-600")} />
+                      </div>
+                      <div className="flex-1">
+                        <div className={cn("font-medium", textClass('secondary', isDark, currentTheme))}>
+                          {user.username}
+                        </div>
+                        <div className={cn("text-xs", textClass('muted', isDark, currentTheme))}>
+                          {user.email} | 角色: {user.role?.name || '未分配'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {batchSaved && (
+                  <div className={cn(
+                    "flex items-center gap-2 px-4 py-3 rounded-lg mt-3",
+                    isDark 
+                      ? isSpecialTheme
+                        ? cn("bg", `-${cardColors.success}-500/15`, "border", cardColors.border)
+                      : "bg-green-500/15 border border-green-500/30"
+                      : "bg-green-50 border border-green-200"
+                  )}>
+                    <CheckCircle className={cn(
+                      "w-5 h-5",
+                      isDark ? isSpecialTheme ? `text-${cardColors.success}-400` : "text-green-400" : "text-green-500"
+                    )} />
+                    <span className={cn(
+                      isDark ? isSpecialTheme ? `text-${cardColors.success}-300` : "text-green-300" : "text-green-700"
+                    )}>批量安全配置设置成功！</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-end">
+                  <Button
+                    onClick={openBatchSecurityConfigModal}
+                    disabled={selectedUserIds.length === 0}
+                    className={cn(
+                      "shadow-lg",
+                      selectedUserIds.length === 0 && "opacity-50 cursor-not-allowed",
+                      isDark && isSpecialTheme 
+                        ? cn("bg-gradient-to-r", cardColors.btnFrom, cardColors.btnVia, cardColors.btnTo, `shadow-${gradientColors.accent}-500/30`)
+                        : "bg-blue-600 hover:bg-blue-700"
+                    )}
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    批量设置安全配置
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* 批量设置安全配置模态框 - 仅管理员可见 */}
+      {user?.role?.name === '系统管理员' && showBatchSecurityConfigModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={cn(
+            "bg-white rounded-xl p-6 w-full max-w-md",
+            isDark ? "bg-slate-800" : ""
+          )}>
+            <h3 className={cn("text-xl font-semibold mb-6", isDark ? "text-white" : "text-gray-900")}>
+              批量设置安全配置
+            </h3>
+            <p className={cn("text-sm mb-4", isDark ? "text-slate-400" : "text-gray-500")}>
+              将为选中的 {selectedUserIds.length} 个用户设置以下安全配置：
+            </p>
+            
+            <div className="space-y-4">
+              {/* 密码错误次数限制 */}
+              <div className="flex items-center justify-between">
+                <label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>
+                  密码错误次数限制
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={batchMaxFailedAttempts}
+                    onChange={(e) => setBatchMaxFailedAttempts(parseInt(e.target.value) || 3)}
+                    className={cn(
+                      "w-24 h-10 px-3 rounded-md border text-base outline-none",
+                      isDark 
+                        ? "bg-slate-700 border-slate-600 text-white focus:border-cyan-500"
+                        : "bg-white border-gray-200 text-gray-900 focus:border-blue-400"
+                    )}
+                  />
+                  <span className={cn("text-sm", isDark ? "text-slate-400" : "text-gray-500")}>次</span>
+                </div>
+              </div>
+
+              {/* 自动解锁时间 */}
+              <div className="flex items-center justify-between">
+                <label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>
+                  自动解锁时间
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max={batchLockDurationUnit === 'hours' ? 168 : batchLockDurationUnit === 'minutes' ? 10080 : 604800}
+                    value={batchLockDuration}
+                    onChange={(e) => setBatchLockDuration(parseInt(e.target.value) || 2)}
+                    className={cn(
+                      "w-24 h-10 px-3 rounded-md border text-base outline-none",
+                      isDark 
+                        ? "bg-slate-700 border-slate-600 text-white focus:border-cyan-500"
+                        : "bg-white border-gray-200 text-gray-900 focus:border-blue-400"
+                    )}
+                  />
+                  <select
+                    value={batchLockDurationUnit}
+                    onChange={(e) => setBatchLockDurationUnit(e.target.value)}
+                    className={cn(
+                      "h-10 px-3 rounded-md border text-sm appearance-none cursor-pointer outline-none",
+                      isDark 
+                        ? "bg-slate-700 border-slate-600 text-white focus:border-cyan-500"
+                        : "bg-white border-gray-200 text-gray-900 focus:border-blue-400"
+                    )}
+                  >
+                    <option value="hours">小时</option>
+                    <option value="minutes">分钟</option>
+                    <option value="seconds">秒</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowBatchSecurityConfigModal(false)}
+                className={cn(isDark ? "border-slate-600 text-slate-300" : "")}
+              >
+                取消
+              </Button>
+              <Button
+                onClick={handleBatchSecurityConfig}
+                className={cn(
+                  "shadow-md",
+                  isDark 
+                    ? "bg-gradient-to-r from-cyan-600 to-blue-600" 
+                    : "bg-gradient-to-r from-cyan-500 to-blue-500"
+                )}
+              >
+                确认设置
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

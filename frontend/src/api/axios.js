@@ -14,6 +14,14 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
       console.log('Axios request - Authorization header added')
     }
+    // 防止GET请求被浏览器缓存
+    if (config.method === 'get') {
+      config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+      config.headers['Pragma'] = 'no-cache'
+      config.headers['Expires'] = '0'
+      // 添加时间戳防止缓存
+      config.params = { ...config.params, _t: Date.now() }
+    }
     return config
   },
   (error) => {

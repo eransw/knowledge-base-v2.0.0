@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, UsersIcon, Mail, User, Calendar, Shield, UserCog, RotateCcw, Lock, Unlock } from 'lucide-react'
+import { Plus, Edit2, Trash2, UsersIcon, Mail, User, Calendar, Shield, UserCog, RotateCcw, Lock, Unlock, UserCheck } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card'
 import { useTheme } from '../context/ThemeContext'
 import { cn } from '../lib/utils'
 import axios from '../api/axios'
@@ -29,15 +29,33 @@ export default function UsersPage() {
   const [showUnlockDialog, setShowUnlockDialog] = useState(false)
   const [currentUserId, setCurrentUserId] = useState(null)
   const [currentUsername, setCurrentUsername] = useState('')
+  const [editRoleId, setEditRoleId] = useState('')
+  const [editError, setEditError] = useState('')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [roleId, setRoleId] = useState('')
   const [deleteUserId, setDeleteUserId] = useState(null)
-
+  
   useEffect(() => {
     fetchUsers()
     fetchRoles()
+    
+    // 定时刷新用户列表（每10秒），确保锁定状态及时更新
+    const interval = setInterval(() => {
+      fetchUsers()
+    }, 10000)
+    
+    // 页面获得焦点时刷新用户列表
+    const handleFocus = () => {
+      fetchUsers()
+    }
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const fetchUsers = async () => {
@@ -209,10 +227,56 @@ export default function UsersPage() {
     setShowEditUserModal(true)
   }
 
+  const handleEditUser = async () => {
+    if (!selectedUser) return
+    
+    setEditError('')
+    
+    if (editPassword && editPassword !== editConfirmPassword) {
+      setEditError('两次输入的密码不一致')
+      return
+    }
+    
+    try {
+      const data = {
+        email: editEmail,
+        password: editPassword || undefined,
+        currentPassword: editCurrentPassword || undefined
+      }
+      
+      await axios.put(`/api/auth/users/${selectedUser.id}`, data)
+      setShowEditUserModal(false)
+      setSelectedUser(null)
+      setEditEmail('')
+      setEditPassword('')
+      setEditConfirmPassword('')
+      setEditCurrentPassword('')
+      fetchUsers()
+      alert('用户信息更新成功')
+    } catch (error) {
+      setEditError(error.response?.data?.error || '更新失败')
+    }
+  }
+
   const openEditRoleModal = (user) => {
     setSelectedUser(user)
     setRoleId(user.roleId?.toString() || '')
     setShowEditRoleModal(true)
+  }
+
+  const handleEditRole = async () => {
+    if (!selectedUser) return
+    
+    try {
+      await axios.put(`/api/auth/users/${selectedUser.id}/role`, { roleId: parseInt(editRoleId) || null })
+      setShowEditRoleModal(false)
+      setSelectedUser(null)
+      setEditRoleId('')
+      fetchUsers()
+      alert('角色更新成功')
+    } catch (error) {
+      alert(error.response?.data?.error || '更新失败')
+    }
   }
 
   const formatDate = (dateString) => {
@@ -250,7 +314,7 @@ export default function UsersPage() {
         {users.map(user => (
           <Card key={user.id} className={cn(
             "transition-all duration-300 hover:shadow-xl",
-            isDark ? "bg-slate-800/80 border-slate-700/50" : "bg-white"
+            isDark ? "bg-slate-800/80 border-slate-700/50" : "bg-white",
           )}>
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
@@ -296,7 +360,7 @@ export default function UsersPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 ml-auto">
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -313,13 +377,13 @@ export default function UsersPage() {
                     className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}
                     title="编辑角色"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <UserCheck className="w-4 h-4" />
                   </Button>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    className={cn("text-amber-500 hover:text-amber-400", isDark ? "border-amber-500/30 hover:bg-amber-500/10" : "")}
                     onClick={() => openResetPasswordDialog(user)}
+                    className={cn("text-blue-500 hover:text-blue-400", isDark ? "border-blue-500/30 hover:bg-blue-500/10" : "")}
                     title="重置密码"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -338,7 +402,7 @@ export default function UsersPage() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      className={cn("text-red-500 hover:text-red-400", isDark ? "border-red-500/30 hover:bg-red-500/10" : "")}
+                      className={cn("text-orange-500 hover:text-orange-400", isDark ? "border-orange-500/30 hover:bg-orange-500/10" : "")}
                       onClick={() => openLockDialog(user)}
                       title="锁定用户"
                     >
@@ -359,6 +423,225 @@ export default function UsersPage() {
           </Card>
         ))}
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <Card className={cn("w-full max-w-md", isDark ? "bg-slate-800/95 border-slate-700/50" : "bg-white")}>
+            <CardHeader className={cn(isDark ? "border-b border-slate-700/40" : "border-b border-gray-200")}>
+              <CardTitle className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>添加用户</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>用户名</Label>
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="请输入用户名"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>邮箱</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="请输入邮箱"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>密码</Label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入密码"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>角色</Label>
+                <select
+                  value={roleId}
+                  onChange={(e) => setRoleId(e.target.value)}
+                  className={cn("h-12 px-3 rounded-md border w-full", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                >
+                  <option value="">请选择角色</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </div>
+            </CardContent>
+            <CardFooter className={cn("flex justify-end gap-3", isDark ? "border-t border-slate-700/40" : "border-t border-gray-200")}>
+              <Button variant="outline" onClick={() => setShowAddModal(false)} className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}>
+                取消
+              </Button>
+              <Button onClick={handleAddUser} className={cn(isDark ? "bg-blue-600 hover:bg-blue-700" : "")}>
+                添加用户
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {showEditUserModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <Card className={cn("w-full max-w-md", isDark ? "bg-slate-800/95 border-slate-700/50" : "bg-white")}>
+            <CardHeader className={cn(isDark ? "border-b border-slate-700/40" : "border-b border-gray-200")}>
+              <CardTitle className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>编辑用户</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>用户名</Label>
+                <Input
+                  value={selectedUser?.username || ''}
+                  disabled
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>邮箱</Label>
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="请输入邮箱"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>当前密码（修改密码时必填）</Label>
+                <Input
+                  type="password"
+                  value={editCurrentPassword}
+                  onChange={(e) => setEditCurrentPassword(e.target.value)}
+                  placeholder="请输入当前密码"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>新密码（留空不修改）</Label>
+                <Input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="请输入新密码"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>确认新密码</Label>
+                <Input
+                  type="password"
+                  value={editConfirmPassword}
+                  onChange={(e) => setEditConfirmPassword(e.target.value)}
+                  placeholder="请确认新密码"
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              {editError && (
+                <div className={cn("p-3 rounded-lg text-sm", isDark ? "bg-red-500/20 text-red-300" : "bg-red-50 text-red-600")}>
+                  {editError}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className={cn("flex justify-end gap-3", isDark ? "border-t border-slate-700/40" : "border-t border-gray-200")}>
+              <Button variant="outline" onClick={() => { setShowEditUserModal(false); setEditError(''); }} className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}>
+                取消
+              </Button>
+              <Button onClick={handleEditUser} className={cn(isDark ? "bg-blue-600 hover:bg-blue-700" : "")}>
+                保存修改
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      {showEditRoleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <Card className={cn("w-full max-w-md", isDark ? "bg-slate-800/95 border-slate-700/50" : "bg-white")}>
+            <CardHeader className={cn(isDark ? "border-b border-slate-700/40" : "border-b border-gray-200")}>
+              <CardTitle className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>编辑用户角色</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>用户名</Label>
+                <Input
+                  value={selectedUser?.username || ''}
+                  disabled
+                  className={cn("h-12", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-gray-700")}>角色</Label>
+                <select
+                  value={editRoleId}
+                  onChange={(e) => setEditRoleId(e.target.value)}
+                  className={cn("h-12 px-3 rounded-md border w-full", isDark ? "bg-slate-700/50 border-slate-600 text-white" : "")}
+                >
+                  <option value="">请选择角色</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </div>
+            </CardContent>
+            <CardFooter className={cn("flex justify-end gap-3", isDark ? "border-t border-slate-700/40" : "border-t border-gray-200")}>
+              <Button variant="outline" onClick={() => setShowEditRoleModal(false)} className={cn(isDark ? "border-slate-600/50 text-white hover:bg-slate-700/30" : "")}>
+                取消
+              </Button>
+              <Button onClick={handleEditRole} className={cn(isDark ? "bg-blue-600 hover:bg-blue-700" : "")}>
+                保存角色
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        title="确认删除"
+        message="确定要删除这个用户吗？此操作无法撤销。"
+        confirmText="删除"
+        cancelText="取消"
+        danger
+      />
+
+      <ConfirmDialog
+        isOpen={showResetPasswordDialog}
+        onClose={() => setShowResetPasswordDialog(false)}
+        onConfirm={handleResetPassword}
+        title="确认重置密码"
+        message={`确定要将用户 "${resetPasswordUsername}" 的密码重置为 "123456" 吗？用户登录后应立即修改密码。`}
+        confirmText="重置"
+        cancelText="取消"
+        danger
+      />
+
+      <ConfirmDialog
+        isOpen={showLockDialog}
+        onClose={() => setShowLockDialog(false)}
+        onConfirm={handleLockUser}
+        title="确认锁定用户"
+        message={`确定要锁定用户 "${currentUsername}" 吗？锁定后该用户将无法登录系统。`}
+        confirmText="锁定"
+        cancelText="取消"
+        danger
+      />
+
+      <ConfirmDialog
+        isOpen={showUnlockDialog}
+        onClose={() => setShowUnlockDialog(false)}
+        onConfirm={handleUnlockUser}
+        title="确认解锁用户"
+        message={`确定要解锁用户 "${currentUsername}" 吗？解锁后该用户将可以正常登录系统。`}
+        confirmText="解锁"
+        cancelText="取消"
+      />
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -599,6 +882,8 @@ export default function UsersPage() {
         confirmText="解锁"
         cancelText="取消"
       />
+
+
     </div>
   )
 }
