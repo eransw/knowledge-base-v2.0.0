@@ -33,6 +33,7 @@ export default function SystemConfig() {
     { id: 'users', label: '用户管理' },
     { id: 'logs', label: '系统日志' },
     { id: 'system-config', label: '系统配置' },
+    { id: 'search-settings', label: '检索配置' },
   ], [])
 
   // 获取用户有权限访问的菜单

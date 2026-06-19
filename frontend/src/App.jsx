@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ConfigProvider } from './context/ConfigContext'
 import { ThemeProvider } from './context/ThemeContext'
+import SearchSettings from './pages/SearchSettings'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Documents from './pages/Documents'
@@ -35,6 +36,7 @@ function App() {
               <Route path="users" element={<Users />} />
               <Route path="logs" element={<Logs />} />
               <Route path="system-config" element={<SystemConfig />} />
+              <Route path="search-settings" element={<SearchSettings />} />
             </Route>
           </Routes>
           </BrowserRouter>

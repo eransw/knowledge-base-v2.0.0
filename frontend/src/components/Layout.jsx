@@ -16,7 +16,8 @@ import {
   Bot,
   Shield,
   Users,
-  FileText
+  FileText,
+  Search
 } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { Button } from './ui/button'
@@ -106,6 +107,7 @@ export default function Layout() {
     { icon: FolderOpen, label: '分类管理', path: '/categories', menuId: 'categories' },
     { icon: Tag, label: '标签管理', path: '/tags', menuId: 'tags' },
     { icon: Bot, label: 'AI模型配置', path: '/ai-config', menuId: 'ai-config' },
+    { icon: Search, label: '检索配置', path: '/search-settings', menuId: 'search-settings' },
     { icon: Shield, label: '角色管理', path: '/roles', menuId: 'roles' },
     { icon: Users, label: '用户管理', path: '/users', menuId: 'users' },
     { icon: FileText, label: '系统日志', path: '/logs', menuId: 'logs' },

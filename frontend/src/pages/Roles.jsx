@@ -16,6 +16,7 @@ const MENU_ITEMS = [
   { id: 'tags', label: '标签管理' },
   { id: 'system-config', label: '系统配置' },
   { id: 'ai-config', label: 'AI配置' },
+  { id: 'search-settings', label: '检索配置' },
   { id: 'roles', label: '角色管理' },
   { id: 'users', label: '用户管理' },
   { id: 'logs', label: '系统日志' },

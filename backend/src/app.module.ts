@@ -10,6 +10,7 @@ import { NoteModule } from './modules/note/note.module';
 import { AiModule } from './modules/ai/ai.module';
 import { RoleModule } from './modules/role/role.module';
 import { LogModule } from './modules/log/log.module';
+import { SearchModule } from './modules/search/search.module';
 import * as path from 'path';
 
 @Module({
@@ -30,6 +31,7 @@ import * as path from 'path';
     AiModule,
     RoleModule,
     LogModule,
+    SearchModule,
   ],
 })
 export class AppModule {}

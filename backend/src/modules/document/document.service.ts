@@ -9,7 +9,8 @@ import { Note } from '../note/note.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse: any = require('pdf-parse');
 
 @Injectable()
 export class DocumentService {
@@ -57,6 +58,28 @@ export class DocumentService {
     return documents;
   }
 
+  async findByIds(userId: number, ids: number[]): Promise<Document[]> {
+    const documents = await this.documentRepository
+      .createQueryBuilder('document')
+      .leftJoinAndSelect('document.category', 'category')
+      .leftJoinAndSelect('document.tags', 'tags')
+      .leftJoinAndSelect('document.attachments', 'attachments')
+      .where('document.userId = :userId AND document.id IN (:...ids)', { userId, ids })
+      .getMany();
+
+    for (const document of documents) {
+      for (const attachment of document.attachments || []) {
+        try {
+          attachment.originalFilename = decodeURIComponent(attachment.originalFilename);
+        } catch (e) {
+          // 如果解码失败，保持原始文件名
+        }
+      }
+    }
+
+    return documents;
+  }
+
   // 递归获取分类及其所有子分类的ID
   private async getCategoryIdsWithChildren(userId: number, categoryId: number): Promise<number[]> {
     const categoryIds: number[] = [categoryId];
@@ -88,6 +111,14 @@ export class DocumentService {
     return document;
   }
 
+  async incrementViewCount(userId: number, id: number): Promise<void> {
+    await this.documentRepository.increment(
+      { id, userId },
+      'viewCount',
+      1
+    );
+  }
+
   private decodeAttachmentFilenames(document: Document): void {
     if (document.attachments && Array.isArray(document.attachments)) {
       document.attachments.forEach(attachment => {
@@ -101,15 +132,71 @@ export class DocumentService {
   }
 
   async search(userId: number, keyword: string): Promise<Document[]> {
-    return this.documentRepository
+    const documents = await this.documentRepository
       .createQueryBuilder('document')
       .leftJoinAndSelect('document.category', 'category')
       .leftJoinAndSelect('document.tags', 'tags')
+      .leftJoinAndSelect('document.attachments', 'attachments')
       .where('document.userId = :userId', { userId })
-      .andWhere('document.title LIKE :keyword', { keyword: `%${keyword}%` })
-      .orWhere('document.userId = :userId', { userId })
-      .andWhere('document.content LIKE :keyword', { keyword: `%${keyword}%` })
       .getMany();
+
+    const lowerKeyword = keyword.toLowerCase();
+    const matchedDocuments: Document[] = [];
+
+    for (const document of documents) {
+      let isMatch = false;
+
+      if (document.title.toLowerCase().includes(lowerKeyword) ||
+          (document.content && document.content.toLowerCase().includes(lowerKeyword)) ||
+          (document.description && document.description.toLowerCase().includes(lowerKeyword))) {
+        isMatch = true;
+      }
+
+      if (!isMatch && document.attachments && document.attachments.length > 0) {
+        for (const attachment of document.attachments) {
+          try {
+            const content = await this.extractAttachmentContent(attachment);
+            if (content && content.toLowerCase().includes(lowerKeyword)) {
+              isMatch = true;
+              break;
+            }
+          } catch (error) {
+            console.error(`Failed to extract content from attachment ${attachment.id}:`, error);
+          }
+        }
+      }
+
+      if (isMatch) {
+        matchedDocuments.push(document);
+      }
+    }
+
+    return matchedDocuments;
+  }
+
+  private async extractAttachmentContent(attachment: FileAttachment): Promise<string> {
+    const filePath = attachment.filePath;
+    
+    if (!fs.existsSync(filePath)) {
+      return '';
+    }
+
+    const fileType = attachment.fileType.toLowerCase();
+    
+    if (fileType.includes('pdf')) {
+      const dataBuffer = fs.readFileSync(filePath);
+      const pdfData = await pdfParse(dataBuffer);
+      return pdfData.text || '';
+    } else if (fileType.includes('docx') || fileType.includes('doc')) {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value || '';
+    } else if (fileType.includes('txt') || fileType.includes('md') || fileType.includes('markdown')) {
+      return fs.readFileSync(filePath, 'utf-8');
+    } else if (fileType.includes('html') || fileType.includes('htm')) {
+      return fs.readFileSync(filePath, 'utf-8');
+    }
+
+    return '';
   }
 
   async create(document: Partial<Document>): Promise<Document> {
@@ -238,10 +325,8 @@ export class DocumentService {
       switch (fileType.toLowerCase()) {
         case 'application/pdf':
           try {
-            const pdfParser = new PDFParse({ data: fileBuffer });
-            const pdfData = await pdfParser.getText();
-            await pdfParser.destroy();
-            return pdfData.text;
+            const pdfData = await pdfParse(fileBuffer);
+            return pdfData.text || '';
           } catch (e) {
             console.error('Failed to parse PDF:', e);
             return '';

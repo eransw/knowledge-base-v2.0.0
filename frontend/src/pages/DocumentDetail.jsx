@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../api/axios'
 import { useMediaUrl } from '../hooks/useMediaUrl'
@@ -123,6 +123,7 @@ export default function DocumentDetail() {
   }, [])
 
   // 获取文档详情和笔记
+  const viewCountRef = useRef(false)
   useEffect(() => {
     axios.get(`/api/documents/${id}`).then(res => {
       setDocument(res.data)
@@ -139,6 +140,12 @@ export default function DocumentDetail() {
       // 如果笔记不存在，清空内容
       setNoteContent('')
     })
+
+    // 增加浏览次数（使用 useRef 确保只调用一次）
+    if (!viewCountRef.current) {
+      viewCountRef.current = true
+      axios.post(`/api/documents/${id}/view`).catch(() => {})
+    }
   }, [id])
 
   // 初始化编辑器（语雀风格）

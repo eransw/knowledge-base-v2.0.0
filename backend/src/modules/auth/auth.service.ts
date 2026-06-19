@@ -241,15 +241,14 @@ export class AuthService {
   }
 
   async getUser(id: number) {
-    const user = await this.userRepository
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.role', 'role')
-      .where('user.id = :id', { id })
-      .getOne();
-      
+    const user = await this.userRepository.findOne({ 
+      where: { id }, 
+      relations: { role: true } 
+    });
+    
     if (!user) return { error: 'User not found' };
     
-    console.log(`getUser: user.id=${user.id}, user.roleId=${user.roleId}, user.role=${user.role ? JSON.stringify(user.role) : null}`);
+    console.log(`getUser: user.id=${user.id}, menuOrder=${user.menuOrder}`);
     
     return {
       id: user.id,

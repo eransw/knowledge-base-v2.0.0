@@ -34,6 +34,9 @@ export class Document {
   @OneToMany(() => FileAttachment, (attachment) => attachment.document, { cascade: true })
   attachments: FileAttachment[];
 
+  @Column({ default: 0 })
+  viewCount: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

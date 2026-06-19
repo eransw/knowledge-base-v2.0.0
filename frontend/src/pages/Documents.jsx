@@ -154,8 +154,20 @@ export default function Documents() {
       return
     }
     try {
-      const response = await axios.get(`/api/documents/search?keyword=${searchTerm}`)
-      setDocuments(response.data)
+      const response = await axios.get(`/api/search?keyword=${searchTerm}`)
+      const searchResults = response.data
+      if (searchResults.length > 0) {
+        const documentIds = searchResults.map(r => r.id).join(',')
+        const docsResponse = await axios.get(`/api/documents/by-ids?ids=${documentIds}`)
+        const highlightsMap = new Map(searchResults.map(r => [r.id.toString(), r.highlights]))
+        const sortedDocuments = docsResponse.data.map(doc => ({
+          ...doc,
+          highlights: highlightsMap.get(doc.id.toString())
+        }))
+        setDocuments(sortedDocuments)
+      } else {
+        setDocuments([])
+      }
     }
     catch (error) {
       console.error('Search failed:', error)
@@ -1533,7 +1545,7 @@ export default function Documents() {
                           ? "bg-transparent text-slate-100 placeholder:text-slate-500" 
                           : "bg-transparent text-gray-900 placeholder:text-gray-400"
                       )}
-                      placeholder="搜索文档标题、内容..."
+                      placeholder="搜索文档标题、内容、附件..."
                     />
                     {searchTerm && (
                       <button
@@ -1670,8 +1682,7 @@ export default function Documents() {
                                   ? "text-white group-hover:text-violet-300"
                                   : "text-white group-hover:text-cyan-300" 
                               : "text-gray-800 group-hover:text-blue-600"
-                          )}>
-                            {document.title}
+                          )} dangerouslySetInnerHTML={{ __html: document.highlights?.title?.[0] || document.title }}>
                           </h3>
                           {document.category && (
                             <div className={cn(
@@ -1699,12 +1710,48 @@ export default function Documents() {
                       </div>
                     </CardHeader>
                     <CardContent className="px-5 pb-5 relative">
-                      <p className={cn(
-                        "text-sm line-clamp-2 mb-4",
-                        isDark ? "text-slate-400" : "text-gray-500"
-                      )}>
-                        {document.description || '暂无内容'}
-                      </p>
+                      {/* 搜索结果摘要 */}
+                      {document.highlights ? (
+                        <div className="space-y-2 mb-4">
+                          {/* 内容摘要 */}
+                          {(document.highlights.content?.length > 0 || document.highlights.description?.length > 0 || document.highlights.noteContent?.length > 0) && (
+                            <div className={cn(
+                              "text-sm line-clamp-2",
+                              isDark ? "text-slate-300" : "text-gray-600"
+                            )} dangerouslySetInnerHTML={{
+                              __html: (document.highlights.content?.[0] 
+                                || document.highlights.description?.[0] 
+                                || document.highlights.noteContent?.[0] 
+                                || document.description 
+                                || '暂无内容').substring(0, 200) + '...'
+                            }} />
+                          )}
+                          {/* 附件摘要 */}
+                          {document.highlights.attachments?.length > 0 && (
+                            <div className={cn(
+                              "text-xs rounded-lg px-3 py-2 border",
+                              isDark 
+                                ? "bg-slate-800/80 border-slate-700/50 text-slate-300" 
+                                : "bg-gray-50 border-gray-200 text-gray-600"
+                            )}>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <FileText className="w-3 h-3 text-blue-500" />
+                                <span className="font-medium text-blue-500">附件: {document.highlights.attachments[0].name}</span>
+                              </div>
+                              <div className="line-clamp-2" dangerouslySetInnerHTML={{
+                                __html: document.highlights.attachments[0].highlight.substring(0, 150) + '...'
+                              }} />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className={cn(
+                          "text-sm line-clamp-2 mb-4",
+                          isDark ? "text-slate-400" : "text-gray-500"
+                        )}>
+                          {document.description || '暂无内容'}
+                        </p>
+                      )}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <span className={cn("flex items-center gap-1.5", isDark ? "text-slate-300" : "text-gray-500")}>
@@ -1854,10 +1901,10 @@ export default function Documents() {
                     onClick={() => navigate(`/documents/${document.id}`)}
                   >
                     <CardContent className="px-5 py-4">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-start gap-4">
                         {/* 文件图标 */}
                         <div className={cn(
-                          "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                          "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5",
                           fileIcon(document.attachments)
                         )}>
                           <FileText className="w-6 h-6" />
@@ -1865,30 +1912,86 @@ export default function Documents() {
                         
                         {/* 文档信息 */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <h3 className={cn(
-                              "font-semibold text-base",
-                              isDark ? "text-white" : "text-gray-800"
-                            )}>
-                              {document.title}
-                            </h3>
+                          {/* 标题 - 百度搜索结果风格 */}
+                          <h3 className={cn(
+                            "text-lg font-medium mb-1 cursor-pointer hover:underline",
+                            isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-700 hover:text-blue-800"
+                          )} dangerouslySetInnerHTML={{
+                            __html: document.highlights?.title?.[0] || document.title
+                          }}>
+                          </h3>
+                          
+                          {/* 来源信息 */}
+                          <div className="flex items-center gap-2 mb-2 text-xs">
                             {document.category && (
-                              <Badge className={cn(
-                                "px-2 py-0.5 text-xs",
-                                isDark 
-                                  ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" 
-                                  : "bg-blue-50 text-blue-600"
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded",
+                                isDark ? "bg-green-500/20 text-green-300" : "bg-green-50 text-green-700"
                               )}>
                                 {document.category.name}
-                              </Badge>
+                              </span>
                             )}
+                            <span className={isDark ? "text-slate-500" : "text-gray-400"}>
+                              {new Date(document.createdAt).toLocaleDateString('zh-CN')}
+                            </span>
+                            <span className={isDark ? "text-slate-500" : "text-gray-400"}>
+                              {document.attachments?.length > 0 ? `${document.attachments.length} 个附件` : ''}
+                            </span>
                           </div>
-                          <p className={cn(
-                            "text-sm truncate mb-2",
-                            isDark ? "text-slate-400" : "text-gray-500"
-                          )}>
-                            {document.description || '暂无内容'}
-                          </p>
+                          
+                          {/* 搜索结果摘要 - 多行显示 */}
+                          {document.highlights ? (
+                            <div className="space-y-2 mb-2">
+                              {/* 内容摘要 */}
+                              {(document.highlights.content?.length > 0 || document.highlights.description?.length > 0 || document.highlights.noteContent?.length > 0) && (
+                                <div className={cn(
+                                  "text-sm leading-relaxed line-clamp-2",
+                                  isDark ? "text-slate-300" : "text-gray-600"
+                                )} dangerouslySetInnerHTML={{
+                                  __html: (document.highlights.content?.[0] 
+                                    || document.highlights.description?.[0] 
+                                    || document.highlights.noteContent?.[0] 
+                                    || document.description 
+                                    || '暂无内容')
+                                }} />
+                              )}
+                              
+                              {/* 附件匹配 - 突出显示 */}
+                              {document.highlights.attachments?.length > 0 && (
+                                <div className={cn(
+                                  "rounded-lg px-3 py-2 border",
+                                  isDark 
+                                    ? "bg-amber-900/20 border-amber-700/30" 
+                                    : "bg-amber-50 border-amber-200"
+                                )}>
+                                  {document.highlights.attachments.map((att, idx) => (
+                                    <div key={idx} className={idx > 0 ? "mt-2 pt-2 border-t border-amber-300/30" : ""}>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <FileText className={cn("w-4 h-4", isDark ? "text-amber-400" : "text-amber-600")} />
+                                        <span className={cn("text-xs font-semibold", isDark ? "text-amber-400" : "text-amber-700")}>
+                                          附件: {att.name}
+                                        </span>
+                                      </div>
+                                      <div className={cn(
+                                        "text-sm line-clamp-2 leading-relaxed",
+                                        isDark ? "text-slate-300" : "text-gray-600"
+                                      )} dangerouslySetInnerHTML={{
+                                        __html: att.highlight
+                                      }} />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <p className={cn(
+                              "text-sm line-clamp-2 mb-2",
+                              isDark ? "text-slate-400" : "text-gray-500"
+                            )}>
+                              {document.description || '暂无内容'}
+                            </p>
+                          )}
+                          
                           <div className="flex items-center gap-4">
                             <span className={cn("flex items-center gap-1", isDark ? "text-slate-400" : "text-gray-500")}>
                               <Calendar className="w-3.5 h-3.5" />
@@ -3068,6 +3171,20 @@ export default function Documents() {
         cancelText="取消"
         danger
       />
+
+      <style>{`
+        .search-highlight {
+          background-color: #fbbf24;
+          color: #1f2937;
+          padding: 0 2px;
+          border-radius: 2px;
+          font-weight: bold;
+        }
+        .dark .search-highlight {
+          background-color: #fbbf24;
+          color: #1f2937;
+        }
+      `}</style>
     </div>
   )
 }

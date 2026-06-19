@@ -72,10 +72,24 @@ export class DocumentController {
     );
   }
 
+  @Get('by-ids')
+  findByIds(@Req() req: Request, @Query('ids') ids: string) {
+    const userId = req.user['id'];
+    const idArray = ids.split(',').map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    return this.documentService.findByIds(userId, idArray);
+  }
+
   @Get(':id')
   findOne(@Req() req: Request, @Param('id') id: string) {
     const userId = req.user['id'];
     return this.documentService.findOne(userId, +id);
+  }
+
+  @Post(':id/view')
+  async incrementView(@Req() req: Request, @Param('id') id: string) {
+    const userId = req.user['id'];
+    await this.documentService.incrementViewCount(userId, +id);
+    return { success: true };
   }
 
   @Get('search')
