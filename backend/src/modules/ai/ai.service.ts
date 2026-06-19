@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DocumentService } from '../document/document.service';
 import { Note } from '../note/note.entity';
+import { AiConfig } from './ai-config.entity';
 
 // 国内AI模型预设配置
 const MODEL_PRESETS = {
@@ -52,46 +53,80 @@ const MODEL_PRESETS = {
 
 @Injectable()
 export class AiService {
-  private config = {
-    apiKey: '',
-    apiSecret: '', // 火山AK/SK认证需要的SecretKey
-    apiUrl: 'https://api.doubao.com/v1/chat/completions',
-    model: 'Doubao-Pro',
-    temperature: 0.7,
-    maxTokens: 2000,
-    provider: 'doubao-pro',
-    authType: 'bearer',
-    mockMode: false, // 模拟模式，用于测试
-  };
-
   constructor(
     private readonly documentService: DocumentService,
     @InjectRepository(Note)
     private readonly noteRepository: Repository<Note>,
+    @InjectRepository(AiConfig)
+    private readonly aiConfigRepository: Repository<AiConfig>,
   ) {}
 
+  private async getOrCreateConfig(): Promise<AiConfig> {
+    let config = await this.aiConfigRepository.findOne({ where: { id: 1 } });
+    if (!config) {
+      config = this.aiConfigRepository.create({
+        id: 1,
+        provider: 'doubao-pro',
+        apiKey: '',
+        apiSecret: '',
+        apiUrl: 'https://api.doubao.com/v1/chat/completions',
+        model: 'Doubao-Pro',
+        temperature: 0.7,
+        maxTokens: 2000,
+        authType: 'bearer',
+        mockMode: false,
+      });
+      config = await this.aiConfigRepository.save(config);
+    }
+    return config;
+  }
+
   async getConfig() {
-    return { ...this.config, presets: MODEL_PRESETS };
+    const config = await this.getOrCreateConfig();
+    return {
+      provider: config.provider,
+      apiKey: config.apiKey,
+      apiSecret: config.apiSecret,
+      apiUrl: config.apiUrl,
+      model: config.model,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      authType: config.authType,
+      mockMode: config.mockMode,
+      presets: MODEL_PRESETS,
+    };
   }
 
   async updateConfig(newConfig: any) {
+    const config = await this.getOrCreateConfig();
+
     // 如果选择了预设模型，应用预设配置
     if (newConfig.provider && MODEL_PRESETS[newConfig.provider]) {
       const preset = MODEL_PRESETS[newConfig.provider];
-      this.config = {
-        ...this.config,
-        ...preset,
-        apiKey: newConfig.apiKey || this.config.apiKey,
-        apiSecret: newConfig.apiSecret || this.config.apiSecret, // 保存SecretKey
-        temperature: newConfig.temperature !== undefined ? newConfig.temperature : this.config.temperature,
-        maxTokens: newConfig.maxTokens !== undefined ? newConfig.maxTokens : this.config.maxTokens,
-        provider: newConfig.provider,
-        mockMode: newConfig.mockMode !== undefined ? newConfig.mockMode : this.config.mockMode,
-      };
-    } else {
-      this.config = { ...this.config, ...newConfig };
+      config.provider = newConfig.provider;
+      config.apiUrl = preset.apiUrl;
+      config.model = preset.model;
+      config.authType = preset.authType;
     }
-    return this.config;
+
+    if (newConfig.apiKey !== undefined) {
+      config.apiKey = newConfig.apiKey;
+    }
+    if (newConfig.apiSecret !== undefined) {
+      config.apiSecret = newConfig.apiSecret;
+    }
+    if (newConfig.temperature !== undefined) {
+      config.temperature = newConfig.temperature;
+    }
+    if (newConfig.maxTokens !== undefined) {
+      config.maxTokens = newConfig.maxTokens;
+    }
+    if (newConfig.mockMode !== undefined) {
+      config.mockMode = newConfig.mockMode;
+    }
+
+    await this.aiConfigRepository.save(config);
+    return this.getConfig();
   }
 
   async getAllSystemData(userId: number) {
@@ -118,6 +153,7 @@ export class AiService {
   }
 
   async chat(userId: number, question: string, documentId?: string) {
+    const config = await this.getConfig();
     const systemData = await this.getAllSystemData(userId);
 
     const messages = [
@@ -133,7 +169,7 @@ export class AiService {
 
     try {
       // 模拟模式：返回预设回复用于测试
-      if (this.config.mockMode) {
+      if (config.mockMode) {
         const mockAnswers = [
           `这是一个模拟回答。您问的是："${question}"\n\n系统已成功收集到以下数据：\n- 文档数量: ${(await this.documentService.findAll(userId)).length}\n- 笔记数量: ${(await this.noteRepository.find()).length}\n\n如果配置了真实的AI模型，这里将显示基于系统数据的智能回答。`,
           `模拟模式已启用。您的问题 "${question}" 已收到。\n\n在实际使用中，系统会：\n1. 收集所有文档和笔记数据\n2. 将数据作为上下文发送给AI模型\n3. 返回基于系统数据的精准回答\n\n请在AI配置页面关闭模拟模式并配置真实的API密钥。`,
@@ -146,7 +182,7 @@ export class AiService {
         };
       }
 
-      if (!this.config.apiKey) {
+      if (!config.apiKey) {
         return {
           success: false,
           message: '请先配置AI大模型API密钥',
@@ -155,10 +191,10 @@ export class AiService {
 
       // 构建请求体
       let body: Record<string, any> = {
-        model: this.config.model,
+        model: config.model,
         messages,
-        temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
       };
 
       const headers: Record<string, string> = {
@@ -166,42 +202,42 @@ export class AiService {
       };
 
       // 根据认证类型设置请求头
-      if (this.config.authType === 'bearer') {
-        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-      } else if (this.config.authType === 'volc-aksk') {
+      if (config.authType === 'bearer') {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      } else if (config.authType === 'volc-aksk') {
         // 火山AK/SK认证：使用HMAC-SHA256签名
-        const urlObj = new URL(this.config.apiUrl);
+        const urlObj = new URL(config.apiUrl);
         const host = urlObj.hostname;
         const path = urlObj.pathname;
         const now = new Date();
         const xDate = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-        
+
         // 构造待签名字符串
         const stringToSign = `POST\n${path}\n${xDate}\n${host}\n${JSON.stringify(body)}`;
-        
+
         // 使用HMAC-SHA256签名
         const crypto = require('crypto');
         const signature = crypto
-          .createHmac('sha256', this.config.apiSecret)
+          .createHmac('sha256', config.apiSecret)
           .update(stringToSign, 'utf8')
           .digest('base64');
-        
-        headers['Authorization'] = `HMAC-SHA256 Credential=${this.config.apiKey}, SignedHeaders=host;x-date, Signature=${signature}`;
+
+        headers['Authorization'] = `HMAC-SHA256 Credential=${config.apiKey}, SignedHeaders=host;x-date, Signature=${signature}`;
         headers['X-Date'] = xDate;
       }
 
       // 文心一言特殊处理
-      if (this.config.provider === 'ernie-4.0') {
+      if (config.provider === 'ernie-4.0') {
         body = {
-          model: this.config.model,
+          model: config.model,
           messages,
-          temperature: this.config.temperature,
-          max_tokens: this.config.maxTokens,
-          api_key: this.config.apiKey,
+          temperature: config.temperature,
+          max_tokens: config.maxTokens,
+          api_key: config.apiKey,
         };
       }
 
-      const response = await fetch(this.config.apiUrl, {
+      const response = await fetch(config.apiUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -260,20 +296,20 @@ export class AiService {
     const path = urlObj.pathname;
     const now = new Date();
     const xDate = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
-    
+
     // 火山方舟签名格式：按UTF-8编码计算HMAC-SHA256
     // 签名串格式: HTTPMethod + "\n" + URI + "\n" + Date + "\n" + Host + "\n" + Body
     const stringToSign = `POST\n${path}\n${xDate}\n${host}\n${body}`;
-    
+
     // 使用HMAC-SHA256签名
     const crypto = require('crypto');
     const signature = crypto
       .createHmac('sha256', secretKey)
       .update(stringToSign, 'utf8')
       .digest('base64');
-    
+
     const authorization = `HMAC-SHA256 Credential=${accessKey}, SignedHeaders=host;x-date, Signature=${signature}`;
-    
+
     return { authorization, xDate };
   }
 }

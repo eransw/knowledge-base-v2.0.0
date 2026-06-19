@@ -75,6 +75,15 @@ export default function Documents() {
   const [batchUploadPreview, setBatchUploadPreview] = useState([])
   const [batchUploadCategory, setBatchUploadCategory] = useState(null)
   const [showBatchUploadConfirm, setShowBatchUploadConfirm] = useState(false)
+  // 交互式编辑状态
+  const [batchUploadEditableData, setBatchUploadEditableData] = useState([])
+  const [editingItemId, setEditingItemId] = useState(null)
+  const [editingItemName, setEditingItemName] = useState('')
+  const [expandedItems, setExpandedItems] = useState(new Set())
+  const [selectedDocId, setSelectedDocId] = useState(null)
+  const [draggingAttachment, setDraggingAttachment] = useState(null)
+  const [batchUploadTab, setBatchUploadTab] = useState('structure')
+  const [tagInputValue, setTagInputValue] = useState('')
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -270,7 +279,345 @@ export default function Documents() {
     }
   }
 
-  // 处理批量上传文件，构建预览结构
+  // 生成唯一ID
+  const generateId = () => `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+  // 递归查找项目
+  const findItemById = (items, id) => {
+    for (const item of items) {
+      if (item.id === id) return item
+      if (item.children) {
+        const found = findItemById(item.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  // 递归删除项目
+  const removeItemById = (items, id) => {
+    return items.filter(item => {
+      if (item.id === id) return false
+      if (item.children) {
+        item.children = removeItemById(item.children, id)
+      }
+      return true
+    })
+  }
+
+  // 递归更新项目名称
+  const updateItemNameById = (items, id, newName) => {
+    return items.map(item => {
+      if (item.id === id) {
+        return { ...item, name: newName }
+      }
+      if (item.children) {
+        return { ...item, children: updateItemNameById(item.children, id, newName) }
+      }
+      return item
+    })
+  }
+
+  // 切换展开/折叠
+  const toggleExpand = (id) => {
+    setExpandedItems(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  // 开始编辑名称
+  const startEditName = (item) => {
+    setEditingItemId(item.id)
+    setEditingItemName(item.name)
+  }
+
+  // 保存编辑的名称
+  const saveEditName = () => {
+    if (editingItemId && editingItemName.trim()) {
+      setBatchUploadEditableData(prev => updateItemNameById(prev, editingItemId, editingItemName.trim()))
+    }
+    setEditingItemId(null)
+    setEditingItemName('')
+  }
+
+  // 删除项目
+  const deleteBatchItem = (id) => {
+    setBatchUploadEditableData(prev => removeItemById(prev, id))
+    if (selectedDocId === id) setSelectedDocId(null)
+  }
+
+  // 从文档中移除附件
+  const removeAttachmentFromDoc = (docId, attachmentId) => {
+    setBatchUploadEditableData(prev => {
+      const doc = findItemById(prev, docId)
+      if (!doc || !doc.attachments) return prev
+      const newAttachments = doc.attachments.filter(a => a.id !== attachmentId)
+      // 如果文档没有附件了，删除该文档
+      if (newAttachments.length === 0) {
+        return removeItemById(prev, docId)
+      }
+      // 更新文档的附件
+      return prev.map(item => {
+        if (item.id === docId) {
+          return { ...item, attachments: newAttachments }
+        }
+        if (item.children) {
+          return { ...item, children: updateItemAttachments(item.children, docId, newAttachments) }
+        }
+        return item
+      })
+    })
+  }
+
+  // 辅助函数：更新文档附件
+  const updateItemAttachments = (items, docId, newAttachments) => {
+    return items.map(item => {
+      if (item.id === docId) {
+        return { ...item, attachments: newAttachments }
+      }
+      if (item.children) {
+        return { ...item, children: updateItemAttachments(item.children, docId, newAttachments) }
+      }
+      return item
+    })
+  }
+
+  // 移动附件到另一个文档
+  const moveAttachmentToDoc = (attachment, fromDocId, toDocId) => {
+    if (fromDocId === toDocId) return
+    setBatchUploadEditableData(prev => {
+      let newData = [...prev]
+      // 从源文档移除
+      const fromDoc = findItemById(newData, fromDocId)
+      if (fromDoc) {
+        const newFromAttachments = fromDoc.attachments.filter(a => a.id !== attachment.id)
+        if (newFromAttachments.length === 0) {
+          newData = removeItemById(newData, fromDocId)
+        } else {
+          newData = newData.map(item => {
+            if (item.id === fromDocId) return { ...item, attachments: newFromAttachments }
+            if (item.children) return { ...item, children: updateItemAttachments(item.children, fromDocId, newFromAttachments) }
+            return item
+          })
+        }
+      }
+      // 添加到目标文档
+      const toDoc = findItemById(newData, toDocId)
+      if (toDoc) {
+        newData = newData.map(item => {
+          if (item.id === toDocId) return { ...item, attachments: [...item.attachments, attachment] }
+          if (item.children) return { ...item, children: updateItemAttachments(item.children, toDocId, [...toDoc.attachments, attachment]) }
+          return item
+        })
+      }
+      return newData
+    })
+  }
+
+  const updateDocDescription = (docId, description) => {
+    setBatchUploadEditableData(prev => {
+      const updateItem = (items) => {
+        return items.map(item => {
+          if (item.id === docId) {
+            return { ...item, description }
+          }
+          if (item.children) {
+            return { ...item, children: updateItem(item.children) }
+          }
+          return item
+        })
+      }
+      return updateItem(prev)
+    })
+  }
+
+  const updateDocTags = (docId, tags) => {
+    setBatchUploadEditableData(prev => {
+      const updateItem = (items) => {
+        return items.map(item => {
+          if (item.id === docId) {
+            return { ...item, tags }
+          }
+          if (item.children) {
+            return { ...item, children: updateItem(item.children) }
+          }
+          return item
+        })
+      }
+      return updateItem(prev)
+    })
+  }
+
+  // 渲染可编辑树形项
+  const renderEditableItem = (item, depth = 0) => {
+    const isExpanded = expandedItems.has(item.id)
+    const isSelected = selectedDocId === item.id
+    const hasChildren = item.children && item.children.length > 0
+    const isCategory = item.type === 'category'
+    const isDocument = item.type === 'document'
+    const indent = depth * 16
+
+    const handleDropOnDoc = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (draggingAttachment && isDocument && item.id !== draggingAttachment.fromDocId) {
+        moveAttachmentToDoc(draggingAttachment.attachment, draggingAttachment.fromDocId, item.id)
+        setDraggingAttachment(null)
+      }
+    }
+
+    const handleDragOver = (e) => {
+      e.preventDefault()
+      if (isDocument && draggingAttachment && item.id !== draggingAttachment.fromDocId) {
+        e.dataTransfer.dropEffect = 'move'
+      }
+    }
+
+    return (
+      <div key={item.id}>
+        <div
+          className={cn(
+            "flex items-center gap-1 p-2 rounded-lg transition-all duration-200 group",
+            isSelected
+              ? isDark ? "bg-blue-500/20 border border-blue-500/30" : "bg-blue-50 border border-blue-200"
+              : isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100",
+            draggingAttachment && isDocument && item.id !== draggingAttachment.fromDocId
+              ? isDark ? "border-dashed border-blue-500/30" : "border-dashed border-blue-300"
+              : "border border-transparent"
+          )}
+          style={{ marginLeft: `${indent}px` }}
+          onClick={() => isDocument && setSelectedDocId(item.id)}
+          onDrop={handleDropOnDoc}
+          onDragOver={handleDragOver}
+        >
+          {/* 展开/折叠按钮 */}
+          {isCategory && hasChildren ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleExpand(item.id)
+              }}
+              className={cn("h-6 w-6 p-0", isDark ? "hover:bg-slate-600" : "hover:bg-gray-200")}
+            >
+              {isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </Button>
+          ) : (
+            <div className="w-6" />
+          )}
+
+          {/* 图标 */}
+          {isCategory ? (
+            <FolderOpen className={cn("w-4 h-4 flex-shrink-0", isDark ? "text-yellow-400" : "text-yellow-600")} />
+          ) : (
+            <FileText className={cn("w-4 h-4 flex-shrink-0", isDark ? "text-blue-400" : "text-blue-600")} />
+          )}
+
+          {/* 名称编辑 */}
+          {editingItemId === item.id ? (
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <Input
+                value={editingItemName}
+                onChange={(e) => setEditingItemName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveEditName()
+                  if (e.key === 'Escape') {
+                    setEditingItemId(null)
+                    setEditingItemName('')
+                  }
+                }}
+                onBlur={saveEditName}
+                autoFocus
+                className={cn(
+                  "h-7 text-sm py-0 px-2",
+                  isDark ? "bg-slate-600 border-slate-500 text-white" : "bg-white border-gray-300"
+                )}
+              />
+            </div>
+          ) : (
+            <span
+              className={cn(
+                "text-sm truncate flex-1 min-w-0 cursor-pointer",
+                isDark ? "text-slate-200" : "text-gray-700",
+                isDocument && "hover:text-blue-500"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isDocument) {
+                  setSelectedDocId(item.id)
+                }
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                startEditName(item)
+              }}
+              title="双击编辑名称"
+            >
+              {item.name}
+            </span>
+          )}
+
+          {/* 附件数量 */}
+          {isDocument && item.attachments && (
+            <span className={cn(
+              "text-xs px-1.5 py-0.5 rounded-full flex-shrink-0",
+              isDark ? "bg-blue-500/20 text-blue-300" : "bg-blue-100 text-blue-600"
+            )}>
+              {item.attachments.length}
+            </span>
+          )}
+
+          {/* 操作按钮 */}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                startEditName(item)
+              }}
+              className={cn("h-6 w-6 p-0", isDark ? "hover:bg-slate-600 text-slate-400" : "hover:bg-gray-200 text-gray-500")}
+              title="编辑名称"
+            >
+              <Edit3 className="w-3 h-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                deleteBatchItem(item.id)
+              }}
+              className={cn("h-6 w-6 p-0 text-red-500 hover:text-red-400", isDark ? "hover:bg-red-500/10" : "hover:bg-red-50")}
+              title="删除"
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+
+        {/* 子项 */}
+        {isCategory && hasChildren && isExpanded && (
+          <div className="mt-1">
+            {item.children.map(child => renderEditableItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // 处理批量上传文件，构建可编辑结构
   const processBatchFiles = (files) => {
     // 按路径分组
     const pathMap = {}
@@ -281,61 +628,28 @@ export default function Documents() {
       const directoryPath = parts.join('/')
       
       if (!pathMap[directoryPath]) {
-        pathMap[directoryPath] = { categories: [], documents: {} }
+        pathMap[directoryPath] = { documents: {} }
       }
       
       // 提取文件名中的数字作为分组标识
       const match = fileName.match(/(\d+)/)
       const groupNumber = match ? match[1] : 'default'
+      // 取第一个附件的名称（不含扩展名）作为文档名称
       const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '')
-      const cleanName = nameWithoutExt.replace(/\d+/g, '').trim() || fileName.replace(/\.[^/.]+$/, '')
       
       if (!pathMap[directoryPath].documents[groupNumber]) {
         pathMap[directoryPath].documents[groupNumber] = {
-          name: cleanName,
+          name: nameWithoutExt,  // 使用第一个附件的名称作为文档名称
           attachments: []
         }
       }
       pathMap[directoryPath].documents[groupNumber].attachments.push({
+        id: generateId(),
         name: fileName,
-        file: file
+        file: file,
+        size: file.size
       })
     })
-
-    // 构建预览结构
-    const buildPreview = (path) => {
-      const parts = path.split('/').filter(p => p)
-      if (parts.length === 0) return []
-      
-      const result = []
-      let currentPath = ''
-      
-      parts.forEach((part, index) => {
-        currentPath = index === 0 ? part : `${currentPath}/${part}`
-        const data = pathMap[currentPath]
-        
-        const item = {
-          type: 'category',
-          name: part,
-          children: []
-        }
-        
-        // 如果这个路径下有文档，添加文档
-        if (data && Object.keys(data.documents).length > 0) {
-          Object.values(data.documents).forEach(doc => {
-            item.children.push({
-              type: 'document',
-              name: doc.name,
-              attachments: doc.attachments.map(a => a.name)
-            })
-          })
-        }
-        
-        result.push(item)
-      })
-      
-      return result
-    }
 
     // 获取所有唯一的目录路径
     const allPaths = [...new Set(files.map(f => {
@@ -345,111 +659,140 @@ export default function Documents() {
       return parts.join('/')
     }))]
 
-    // 按路径层级分组
-    const preview = []
-    const processedPaths = new Set()
+    // 构建可编辑的树形结构
+    const buildEditableTree = () => {
+      const result = []
+      const processedPaths = new Set()
+      const allExpanded = new Set()
 
-    allPaths.forEach(path => {
-      if (processedPaths.has(path)) return
-      
-      const parts = path.split('/').filter(p => p)
-      if (parts.length === 0) {
-        // 根目录文件
-        const data = pathMap['']
-        if (data && Object.keys(data.documents).length > 0) {
-          Object.values(data.documents).forEach(doc => {
-            preview.push({
+      allPaths.forEach(path => {
+        if (processedPaths.has(path)) return
+        
+        const parts = path.split('/').filter(p => p)
+        if (parts.length === 0) {
+          // 根目录文件
+          const data = pathMap['']
+          if (data && Object.keys(data.documents).length > 0) {
+            Object.values(data.documents).forEach(doc => {
+              const docId = generateId()
+              allExpanded.add(docId)
+              result.push({
+                id: docId,
+                type: 'document',
+                name: doc.name,
+                originalName: doc.name,
+                description: '',
+                tags: [],
+                attachments: doc.attachments
+              })
+            })
+          }
+          processedPaths.add(path)
+          return
+        }
+
+        // 找到最顶层的路径
+        let topPath = parts[0]
+        let fullTopPath = topPath
+        
+        for (let i = 1; i < parts.length; i++) {
+          const potentialPath = parts.slice(0, i).join('/')
+          if (allPaths.some(p => p.startsWith(potentialPath + '/') && p !== potentialPath)) {
+            fullTopPath = potentialPath
+          }
+        }
+
+        if (processedPaths.has(fullTopPath)) return
+
+        // 创建顶层分类
+        const catId = generateId()
+        allExpanded.add(catId)
+        const categoryItem = {
+          id: catId,
+          type: 'category',
+          name: topPath,
+          originalName: topPath,
+          children: []
+        }
+
+        // 添加当前路径下的文档
+        const categoryData = pathMap[fullTopPath] || { documents: {} }
+        if (Object.keys(categoryData.documents).length > 0) {
+          Object.values(categoryData.documents).forEach(doc => {
+            const docId = generateId()
+            allExpanded.add(docId)
+            categoryItem.children.push({
+              id: docId,
               type: 'document',
               name: doc.name,
-              attachments: doc.attachments.map(a => a.name)
+              originalName: doc.name,
+              description: '',
+              tags: [],
+              attachments: doc.attachments
             })
           })
         }
-        processedPaths.add(path)
-        return
-      }
 
-      // 找到最顶层的路径
-      let topPath = parts[0]
-      let fullTopPath = topPath
-      
-      for (let i = 1; i < parts.length; i++) {
-        const potentialPath = parts.slice(0, i).join('/')
-        if (allPaths.some(p => p.startsWith(potentialPath + '/') && p !== potentialPath)) {
-          fullTopPath = potentialPath
-        }
-      }
-
-      if (processedPaths.has(fullTopPath)) return
-
-      // 构建完整的分类树
-      const categoryData = pathMap[fullTopPath] || { categories: [], documents: {} }
-      const children = []
-
-      // 添加当前路径下的文档
-      if (Object.keys(categoryData.documents).length > 0) {
-        Object.values(categoryData.documents).forEach(doc => {
-          children.push({
-            type: 'document',
-            name: doc.name,
-            attachments: doc.attachments.map(a => a.name)
-          })
-        })
-      }
-
-      // 查找子目录并按名称分组，避免重复
-      const subPaths = allPaths.filter(p => p.startsWith(fullTopPath + '/') && p !== fullTopPath)
-      const subCategories = {}
-      
-      subPaths.forEach(subPath => {
-        const relativePath = subPath.substring(fullTopPath.length + 1)
-        const subParts = relativePath.split('/')
-        const subCategoryName = subParts[0]
-        const subData = pathMap[subPath] || { documents: {} }
+        // 查找子目录
+        const subPaths = allPaths.filter(p => p.startsWith(fullTopPath + '/') && p !== fullTopPath)
+        const subCategories = {}
         
-        // 如果这个子分类还没有被处理
-        if (!subCategories[subCategoryName]) {
-          subCategories[subCategoryName] = {
-            type: 'category',
-            name: subCategoryName,
-            children: []
-          }
-        }
-        
-        // 添加这个子路径下的文档
-        if (Object.keys(subData.documents).length > 0) {
-          Object.values(subData.documents).forEach(doc => {
-            // 检查文档是否已存在
-            const exists = subCategories[subCategoryName].children.some(
-              child => child.type === 'document' && child.name === doc.name
-            )
-            if (!exists) {
-              subCategories[subCategoryName].children.push({
-                type: 'document',
-                name: doc.name,
-                attachments: doc.attachments.map(a => a.name)
-              })
+        subPaths.forEach(subPath => {
+          const relativePath = subPath.substring(fullTopPath.length + 1)
+          const subParts = relativePath.split('/')
+          const subCategoryName = subParts[0]
+          const subData = pathMap[subPath] || { documents: {} }
+          
+          if (!subCategories[subCategoryName]) {
+            const subCatId = generateId()
+            allExpanded.add(subCatId)
+            subCategories[subCategoryName] = {
+              id: subCatId,
+              type: 'category',
+              name: subCategoryName,
+              originalName: subCategoryName,
+              children: []
             }
-          })
-        }
-        processedPaths.add(subPath)
-      })
-      
-      // 将去重后的子分类添加到 children
-      Object.values(subCategories).forEach(subCat => {
-        children.push(subCat)
+          }
+          
+          if (Object.keys(subData.documents).length > 0) {
+            Object.values(subData.documents).forEach(doc => {
+              const exists = subCategories[subCategoryName].children.some(
+                child => child.type === 'document' && child.name === doc.name
+              )
+              if (!exists) {
+                const docId = generateId()
+                allExpanded.add(docId)
+                subCategories[subCategoryName].children.push({
+                  id: docId,
+                  type: 'document',
+                  name: doc.name,
+                  originalName: doc.name,
+                  description: '',
+                  tags: [],
+                  attachments: doc.attachments
+                })
+              }
+            })
+          }
+          processedPaths.add(subPath)
+        })
+        
+        Object.values(subCategories).forEach(subCat => {
+          categoryItem.children.push(subCat)
+        })
+
+        result.push(categoryItem)
+        processedPaths.add(fullTopPath)
       })
 
-      preview.push({
-        type: 'category',
-        name: topPath,
-        children: children
-      })
-      
-      processedPaths.add(fullTopPath)
-    })
+      return { tree: result, expanded: allExpanded }
+    }
 
-    setBatchUploadPreview(preview)
+    const { tree, expanded } = buildEditableTree()
+    setBatchUploadEditableData(tree)
+    setExpandedItems(expanded)
+    setBatchUploadPreview(tree) // 保持兼容
   }
 
   // 执行批量上传
@@ -458,10 +801,40 @@ export default function Documents() {
     
     const formData = new FormData()
     
-    batchUploadFiles.forEach((file, index) => {
-      formData.append('files', file)
-      formData.append(`paths[${index}]`, file.webkitRelativePath || file.name)
-    })
+    // 根据编辑后的结构重新组织文件和路径
+    let fileIndex = 0
+    const documentMetadata = []
+    const flattenItems = (items, currentPath = '') => {
+      items.forEach(item => {
+        if (item.type === 'category') {
+          const newPath = currentPath ? `${currentPath}/${item.name}` : item.name
+          if (item.children) {
+            flattenItems(item.children, newPath)
+          }
+        } else if (item.type === 'document' && item.attachments) {
+          const docPath = currentPath ? `${currentPath}/${item.name}` : item.name
+          documentMetadata.push({
+            path: docPath,
+            description: item.description,
+            tags: item.tags
+          })
+          item.attachments.forEach(att => {
+            if (att.file) {
+              const filePath = currentPath ? `${currentPath}/${att.name}` : att.name
+              formData.append('files', att.file)
+              formData.append(`paths[${fileIndex}]`, filePath)
+              fileIndex++
+            }
+          })
+        }
+      })
+    }
+    
+    flattenItems(batchUploadEditableData)
+    
+    if (documentMetadata.length > 0) {
+      formData.append('metadata', JSON.stringify(documentMetadata))
+    }
     
     if (batchUploadCategory) {
       formData.append('parentCategoryId', batchUploadCategory)
@@ -484,6 +857,11 @@ export default function Documents() {
       setBatchUploadFiles([])
       setBatchUploadPreview([])
       setBatchUploadCategory(null)
+      setBatchUploadEditableData([])
+      setExpandedItems(new Set())
+      setSelectedDocId(null)
+      setEditingItemId(null)
+      setEditingItemName('')
       console.log('Refreshing documents...')
       await fetchDocuments()
       console.log('Documents refreshed')
@@ -1877,14 +2255,14 @@ export default function Documents() {
 
       {/* 批量上传模态框 */}
       {showBatchUploadModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <Card className={cn(
             cardClass(isDark, '', currentTheme),
-            "w-full max-w-5xl shadow-2xl overflow-hidden",
-            isDark ? "shadow-black/60 border border-slate-700/50" : "shadow-gray-300/60 border border-gray-100"
+            "w-full h-[90vh] shadow-2xl flex flex-col rounded-2xl",
+            isDark ? "shadow-black/60 border-0" : "shadow-gray-300/60 border-0"
           )}>
             <CardHeader className={cn(
-              "pb-4",
+              "pb-4 px-6 flex-shrink-0",
               isDark ? "border-b border-slate-700/50 bg-gradient-to-r from-slate-800/80 to-transparent" : "border-b border-gray-100 bg-gradient-to-r from-gray-50 to-transparent"
             )}>
               <CardTitle className={cn("flex items-center justify-between text-lg", textClass('primary', isDark, currentTheme))}>
@@ -1900,6 +2278,11 @@ export default function Documents() {
                     setBatchUploadFiles([])
                     setBatchUploadPreview([])
                     setBatchUploadCategory(null)
+                    setBatchUploadEditableData([])
+                    setExpandedItems(new Set())
+                    setSelectedDocId(null)
+                    setEditingItemId(null)
+                    setEditingItemName('')
                   }}
                   className={cn("h-9 w-9 rounded-xl", isDark ? "hover:bg-slate-700/50" : "hover:bg-gray-100")}
                 >
@@ -1910,180 +2293,435 @@ export default function Documents() {
                 选择文件夹进行批量上传，支持自动创建分类和分组附件
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="flex gap-6 h-full">
-                {/* 左侧：上传区域 */}
-                <div className="flex-1 flex flex-col overflow-y-auto pr-2">
-                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
-                    选择文件夹
-                  </h3>
-                  <div className="space-y-5">
-                    {/* 文件上传区域 */}
-                    <div
-                      id="batch-upload-dropzone"
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-4 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300",
-                        batchUploadFiles.length > 0
-                          ? isDark
-                            ? "border-green-500/50 bg-green-500/10"
-                            : "border-green-400 bg-green-100"
-                          : isDark
-                            ? "border-dashed border-slate-600/50 hover:border-solid hover:border-green-500/50 hover:bg-green-500/5"
-                            : "border-dashed border-gray-300 hover:border-solid hover:border-green-400 hover:bg-green-50"
-                      )}
-                      onDrop={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        const files = Array.from(e.dataTransfer.files)
-                        if (files.length > 0) {
+            <CardContent className="flex-1 overflow-hidden flex">
+              {/* 左侧：上传和列表区域 */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* 上传区域 */}
+                <div className="p-6 border-b" style={{ borderColor: isDark ? 'rgba(100,116,139,0.3)' : 'rgba(229,231,235,1)' }}>
+                  <div className="flex gap-4">
+                    {/* 上传区域 */}
+                    <div className="flex-1">
+                      <div
+                        id="batch-upload-dropzone"
+                        className={cn(
+                          "flex flex-col items-center justify-center gap-3 p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-300",
+                          batchUploadFiles.length > 0
+                            ? isDark
+                              ? "border-green-500/50 bg-green-500/10"
+                              : "border-green-400 bg-green-100"
+                            : isDark
+                              ? "border-dashed border-slate-600/50 hover:border-solid hover:border-green-500/50 hover:bg-green-500/5"
+                              : "border-dashed border-gray-300 hover:border-solid hover:border-green-400 hover:bg-green-50"
+                        )}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const files = Array.from(e.dataTransfer.files)
+                          if (files.length > 0) {
+                            setBatchUploadFiles(files)
+                            processBatchFiles(files)
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                        onDragEnter={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                        onClick={() => document.getElementById('batch-upload-input').click()}
+                      >
+                        <div className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300",
+                          batchUploadFiles.length > 0
+                            ? isDark
+                              ? "bg-gradient-to-br from-green-600/30 to-emerald-600/30"
+                              : "bg-gradient-to-br from-green-100 to-emerald-100"
+                            : isDark
+                              ? "bg-gradient-to-br from-slate-700/50 to-slate-800/50"
+                              : "bg-gradient-to-br from-gray-100 to-gray-200"
+                        )}>
+                          <FolderOpen className={cn(
+                            "w-5 h-5",
+                            batchUploadFiles.length > 0
+                              ? isDark ? "text-green-400" : "text-green-500"
+                              : isDark ? "text-slate-400" : "text-gray-400"
+                          )} />
+                        </div>
+                        <p className={cn(
+                          "text-sm font-semibold text-center",
+                          batchUploadFiles.length > 0
+                            ? isDark ? "text-green-300" : "text-green-600"
+                            : textClass('primary', isDark, currentTheme)
+                        )}>
+                          {batchUploadFiles.length > 0
+                            ? `${batchUploadFiles.length} 个文件`
+                            : '拖拽或点击选择文件夹'}
+                        </p>
+                      </div>
+                      <input
+                        id="batch-upload-input"
+                        type="file"
+                        multiple
+                        webkitdirectory="true"
+                        directory="true"
+                        mozdirectory="true"
+                        allowdirs="true"
+                        nwdirectory="true"
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files)
                           setBatchUploadFiles(files)
                           processBatchFiles(files)
-                        }
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                      }}
-                      onDragEnter={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                      }}
-                      onClick={() => document.getElementById('batch-upload-input').click()}
-                    >
-                      <div className={cn(
-                        "w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300",
-                        batchUploadFiles.length > 0
-                          ? isDark
-                            ? "bg-gradient-to-br from-green-600/30 to-emerald-600/30"
-                            : "bg-gradient-to-br from-green-100 to-emerald-100"
-                          : isDark
-                            ? "bg-gradient-to-br from-slate-700/50 to-slate-800/50"
-                            : "bg-gradient-to-br from-gray-100 to-gray-200"
-                      )}>
-                        <FolderOpen className={cn(
-                          "w-8 h-8",
-                          batchUploadFiles.length > 0
-                            ? isDark ? "text-green-400" : "text-green-500"
-                            : isDark ? "text-slate-400" : "text-gray-400"
-                        )} />
-                      </div>
-                      <p className={cn(
-                        "text-lg font-semibold text-center",
-                        batchUploadFiles.length > 0
-                          ? isDark ? "text-green-300" : "text-green-600"
-                          : textClass('primary', isDark, currentTheme)
-                      )}>
-                        {batchUploadFiles.length > 0
-                          ? `已选择 ${batchUploadFiles.length} 个文件`
-                          : '拖拽或点击选择文件夹'}
-                      </p>
-                      <p className={cn("text-sm text-center", textClass('secondary', isDark, currentTheme))}>
-                        将文件夹从 Finder 拖拽到这里，或点击选择<br/>
-                        <span className={cn("text-xs mt-1 block", textClass('muted', isDark, currentTheme))}>
-                          💡 提示：大量文件建议使用拖拽方式
-                        </span>
-                      </p>
+                        }}
+                      />
                     </div>
-                    <input
-                      id="batch-upload-input"
-                      type="file"
-                      multiple
-                      webkitdirectory="true"
-                      directory="true"
-                      mozdirectory="true"
-                      allowdirs="true"
-                      nwdirectory="true"
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files)
-                        setBatchUploadFiles(files)
-                        processBatchFiles(files)
-                      }}
-                    />
-
-                    {/* 选择目标分类 */}
-                    <div className="space-y-2">
-                      <label className={cn("text-sm font-medium", textClass('secondary', isDark, currentTheme))}>
-                        目标分类（可选）
-                      </label>
-                      <select
-                        value={batchUploadCategory || ''}
-                        onChange={(e) => setBatchUploadCategory(e.target.value ? +e.target.value : null)}
-                        className={cn(
-                          "w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-200",
-                          isDark 
-                            ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-green-500/50" 
-                            : "bg-white border-gray-300 text-gray-900 focus:ring-green-500/30"
-                        )}
-                      >
-                        <option value="">作为根分类</option>
-                        {renderCategoryOptions(categories)}
-                      </select>
+                    
+                    {/* 目标分类和统计 */}
+                    <div className="w-[280px] flex-shrink-0 space-y-3">
+                      <div>
+                        <label className={cn("text-xs font-medium mb-1.5 block", textClass('secondary', isDark, currentTheme))}>
+                          目标分类（可选）
+                        </label>
+                        <select
+                          value={batchUploadCategory || ''}
+                          onChange={(e) => setBatchUploadCategory(e.target.value ? +e.target.value : null)}
+                          className={cn(
+                            "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2",
+                            isDark 
+                              ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-green-500/50" 
+                              : "bg-white border-gray-300 text-gray-900 focus:ring-green-500/30"
+                          )}
+                        >
+                          <option value="">作为根分类</option>
+                          {renderCategoryOptions(categories)}
+                        </select>
+                      </div>
+                      
+                      {batchUploadFiles.length > 0 && (
+                        <div className={cn(
+                          "p-3 rounded-lg",
+                          isDark ? "bg-slate-700/50" : "bg-gray-50"
+                        )}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>文件总数</span>
+                            <span className={cn("text-xs font-semibold", textClass('primary', isDark, currentTheme))}>{batchUploadFiles.length} 个</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>总大小</span>
+                            <span className={cn("text-xs font-semibold", textClass('primary', isDark, currentTheme))}>
+                              {(batchUploadFiles.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* 右侧：预览区域 */}
-                <div className="w-96 flex-shrink-0 flex flex-col">
-                  <h3 className={cn("text-base font-semibold mb-4", textClass('primary', isDark, currentTheme))}>
-                    上传预览
-                  </h3>
-                  <div className="flex-1 overflow-y-auto pr-2">
-                    {batchUploadPreview.length > 0 ? (
-                      <div className="space-y-4">
-                        {batchUploadPreview.map((item, index) => (
-                          <div key={index} className={cn(
-                            "p-4 rounded-xl",
-                            isDark ? "bg-slate-700/50" : "bg-gray-50"
-                          )}>
-                            <div className="flex items-center gap-2 mb-2">
-                              {item.type === 'category' ? (
-                                <FolderOpen className={cn("w-4 h-4", isDark ? "text-yellow-400" : "text-yellow-600")} />
-                              ) : (
-                                <FileText className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-blue-600")} />
-                              )}
-                              <span className={cn("text-sm font-medium", textClass('primary', isDark, currentTheme))}>
-                                {item.name}
-                              </span>
-                              {item.type === 'document' && item.attachments && (
-                                <span className={cn("text-xs px-2 py-0.5 rounded-full", isDark ? "bg-blue-500/30 text-blue-300" : "bg-blue-100 text-blue-600")}>
-                                  {item.attachments.length} 个附件
+                {/* 标签页区域 */}
+                <div className="flex-1 overflow-hidden p-6">
+                  {/* 标签页 */}
+                  <div className={cn(
+                    "flex gap-2 p-1 rounded-lg mb-3",
+                    isDark ? "bg-slate-700/50" : "bg-gray-100"
+                  )}>
+                    <Button
+                      variant={batchUploadTab === 'structure' ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setBatchUploadTab('structure')}
+                      className={cn(
+                        "h-8 rounded-md px-3",
+                        batchUploadTab === 'structure'
+                          ? isDark
+                            ? "bg-green-600 text-white hover:bg-green-500"
+                            : "bg-green-500 text-white hover:bg-green-600"
+                          : isDark
+                            ? "text-slate-300 hover:bg-slate-600/50"
+                            : "text-gray-600 hover:bg-gray-200"
+                      )}
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+                      分类结构
+                    </Button>
+                    <Button
+                      variant={batchUploadTab === 'files' ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setBatchUploadTab('files')}
+                      className={cn(
+                        "h-8 rounded-md px-3",
+                        batchUploadTab === 'files'
+                          ? isDark
+                            ? "bg-green-600 text-white hover:bg-green-500"
+                            : "bg-green-500 text-white hover:bg-green-600"
+                          : isDark
+                            ? "text-slate-300 hover:bg-slate-600/50"
+                            : "text-gray-600 hover:bg-gray-200"
+                      )}
+                    >
+                      <FileText className="w-3.5 h-3.5 mr-1.5" />
+                      文件列表
+                    </Button>
+                  </div>
+
+                  {/* 标签页内容 */}
+                  <div className={cn(
+                    "border rounded-xl overflow-hidden h-full",
+                    isDark ? "border-slate-600/50" : "border-gray-200"
+                  )}>
+                    <div className="h-full overflow-y-auto">
+                      {batchUploadTab === 'structure' ? (
+                        /* 分类结构视图 */
+                        <div className="p-3 space-y-1">
+                          {batchUploadEditableData.length > 0 ? (
+                            batchUploadEditableData.map(item => renderEditableItem(item, 0))
+                          ) : (
+                            <div className={cn("flex flex-col items-center justify-center h-48 text-center", textClass('muted', isDark, currentTheme))}>
+                              <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
+                              <p className={cn("text-sm", textClass('secondary', isDark, currentTheme))}>请选择文件夹</p>
+                              <p className={cn("text-xs mt-1", textClass('muted', isDark, currentTheme))}>选择后可编辑分类结构</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* 文件列表视图 */
+                        <div className="p-3 space-y-1">
+                          {batchUploadFiles.length > 0 ? (
+                            batchUploadFiles.map((file, index) => {
+                              const path = file.webkitRelativePath || file.name
+                              return (
+                                <div
+                                  key={index}
+                                  className={cn(
+                                    "flex items-center gap-3 p-2.5 rounded-lg",
+                                    isDark ? "bg-slate-700/30" : "bg-gray-50"
+                                  )}
+                                >
+                                  <FileText className={cn("w-4 h-4 flex-shrink-0", isDark ? "text-blue-400" : "text-blue-600")} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className={cn("text-sm truncate", textClass('primary', isDark, currentTheme))} title={file.name}>
+                                      {file.name}
+                                    </p>
+                                  </div>
+                                  <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>
+                                    {(file.size / 1024).toFixed(1)} KB
+                                  </span>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className={cn("flex flex-col items-center justify-center h-48 text-center", textClass('muted', isDark, currentTheme))}>
+                              <FileText className="w-12 h-12 mb-3 opacity-50" />
+                              <p className={cn("text-sm", textClass('secondary', isDark, currentTheme))}>暂无文件</p>
+                              <p className={cn("text-xs mt-1", textClass('muted', isDark, currentTheme))}>请选择文件夹</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 右侧：文档详情编辑面板 */}
+              <div className={cn(
+                "w-[420px] flex-shrink-0 flex flex-col border-l overflow-hidden",
+                isDark ? "border-slate-700/50 bg-slate-800/30" : "border-gray-200 bg-gray-50/50"
+              )}>
+                {selectedDocId ? (() => {
+                  const doc = findItemById(batchUploadEditableData, selectedDocId)
+                  return doc ? (
+                    <>
+                      {/* 详情标题 */}
+                      <div className={cn(
+                        "p-4 border-b flex items-center justify-between",
+                        isDark ? "border-slate-700/50" : "border-gray-200"
+                      )}>
+                        <div className="flex-1 min-w-0">
+                          <h4 className={cn("text-sm font-semibold truncate", textClass('primary', isDark, currentTheme))}>
+                            {doc.name}
+                          </h4>
+                          <p className={cn("text-xs mt-0.5", textClass('secondary', isDark, currentTheme))}>
+                            {doc.attachments.length} 个附件
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedDocId(null)}
+                          className={cn("h-8 w-8 p-0 ml-2", isDark ? "hover:bg-slate-600" : "hover:bg-gray-200")}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {/* 详情内容 */}
+                      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* 附件列表 */}
+                        <div>
+                          <label className={cn("text-xs font-medium mb-2 block", textClass('secondary', isDark, currentTheme))}>
+                            附件
+                          </label>
+                          <div className="space-y-1.5">
+                            {doc.attachments.map(att => (
+                              <div
+                                key={att.id}
+                                draggable
+                                onDragStart={() => setDraggingAttachment({ attachment: att, fromDocId: doc.id })}
+                                onDragEnd={() => setDraggingAttachment(null)}
+                                className={cn(
+                                  "flex items-center justify-between p-2 rounded-lg text-xs",
+                                  isDark ? "bg-slate-700/50" : "bg-white",
+                                  "cursor-move"
+                                )}
+                              >
+                                <span className={cn("truncate flex-1", textClass('primary', isDark, currentTheme))} title={att.name}>
+                                  📎 {att.name}
                                 </span>
+                                <div className="flex items-center gap-1.5 ml-2">
+                                  <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>
+                                    {(att.size / 1024).toFixed(1)} KB
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeAttachmentFromDoc(doc.id, att.id)}
+                                    className="h-5 w-5 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 描述编辑 */}
+                        <div>
+                          <label className={cn("text-xs font-medium mb-1.5 block", textClass('secondary', isDark, currentTheme))}>
+                            描述
+                          </label>
+                          <textarea
+                            value={doc.description}
+                            onChange={(e) => updateDocDescription(doc.id, e.target.value)}
+                            placeholder="输入文档描述..."
+                            rows={4}
+                            className={cn(
+                              "w-full px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2",
+                              isDark
+                                ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-green-500/50 placeholder:text-slate-500"
+                                : "bg-white border-gray-200 text-gray-900 focus:ring-green-500/30 placeholder:text-gray-400"
+                            )}
+                          />
+                        </div>
+
+                        {/* 标签编辑 */}
+                        <div>
+                          <label className={cn("text-xs font-medium mb-2 block", textClass('secondary', isDark, currentTheme))}>
+                            标签
+                          </label>
+                          
+                          {/* 已添加的标签 */}
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {doc.tags.map((tag, index) => (
+                              <span
+                                key={index}
+                                className={cn(
+                                  "flex items-center gap-1 px-2 py-1 rounded-full text-xs",
+                                  isDark
+                                    ? "bg-blue-500/20 text-blue-300"
+                                    : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                {tag}
+                                <button
+                                  onClick={() => updateDocTags(doc.id, doc.tags.filter((_, i) => i !== index))}
+                                  className="hover:text-red-400"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* 选择现有标签 */}
+                          <div className="mb-2">
+                            <p className={cn("text-xs mb-1.5", textClass('muted', isDark, currentTheme))}>选择现有标签：</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {tags.filter(t => !doc.tags.includes(t.name)).map(tag => (
+                                <button
+                                  key={tag.id}
+                                  onClick={() => updateDocTags(doc.id, [...doc.tags, tag.name])}
+                                  className={cn(
+                                    "px-2 py-1 rounded-full text-xs border",
+                                    isDark
+                                      ? "border-slate-600/50 text-slate-300 hover:bg-blue-500/20 hover:border-blue-500/50"
+                                      : "border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300"
+                                  )}
+                                >
+                                  {tag.name}
+                                </button>
+                              ))}
+                              {tags.length === 0 && (
+                                <p className={cn("text-xs", textClass('muted', isDark, currentTheme))}>暂无标签，请在标签管理中创建</p>
                               )}
                             </div>
-                            {item.children && item.children.length > 0 && (
-                              <div className="ml-6 space-y-2">
-                                {item.children.map((child, childIndex) => (
-                                  <div key={childIndex} className="flex items-center gap-2">
-                                    {child.type === 'category' ? (
-                                      <FolderOpen className={cn("w-3 h-3", isDark ? "text-yellow-500" : "text-yellow-600")} />
-                                    ) : (
-                                      <FileText className={cn("w-3 h-3", isDark ? "text-blue-500" : "text-blue-600")} />
-                                    )}
-                                    <span className={cn("text-xs", textClass('secondary', isDark, currentTheme))}>
-                                      {child.name}
-                                      {child.type === 'document' && child.attachments && (
-                                        <span className={cn("text-xs px-1.5 py-0.5 rounded-full ml-1", isDark ? "bg-blue-500/30 text-blue-400" : "bg-blue-100 text-blue-600")}>
-                                          {child.attachments.length}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                        ))}
+
+                          {/* 新增标签输入 */}
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={tagInputValue}
+                              onChange={(e) => setTagInputValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && tagInputValue.trim()) {
+                                  updateDocTags(doc.id, [...doc.tags, tagInputValue.trim()])
+                                  setTagInputValue('')
+                                }
+                              }}
+                              placeholder="输入新标签"
+                              className={cn(
+                                "flex-1 px-2.5 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2",
+                                isDark
+                                  ? "bg-slate-700/70 border-slate-600/50 text-slate-100 focus:ring-green-500/50"
+                                  : "bg-white border-gray-200 text-gray-900 focus:ring-green-500/30"
+                              )}
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                if (tagInputValue.trim()) {
+                                  updateDocTags(doc.id, [...doc.tags, tagInputValue.trim()])
+                                  setTagInputValue('')
+                                }
+                              }}
+                              className={cn(
+                                "h-7 px-3 rounded-lg text-xs",
+                                isDark
+                                  ? "bg-green-600 hover:bg-green-500"
+                                  : "bg-green-500 hover:bg-green-600"
+                              )}
+                            >
+                              添加
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <div className={cn("flex flex-col items-center justify-center h-64 text-center", textClass('muted', isDark, currentTheme))}>
-                        <FolderOpen className="w-12 h-12 mb-3 opacity-50" />
-                        <p>请选择文件夹</p>
-                        <p className="text-xs mt-1">预览将显示分类结构和文档分组</p>
-                      </div>
-                    )}
+
+                      <p className={cn("px-4 py-2 text-xs border-t", textClass('muted', isDark, currentTheme), isDark ? "border-slate-700/50" : "border-gray-200")}>
+                        💡 拖拽附件到其他文档可移动分配
+                      </p>
+                    </>
+                  ) : null
+                })() : (
+                  /* 未选择文档时的提示 */
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                    <FileText className={cn("w-12 h-12 mb-4 opacity-40", isDark ? "text-slate-500" : "text-gray-400")} />
+                    <p className={cn("text-sm", textClass('secondary', isDark, currentTheme))}>选择文档编辑详情</p>
+                    <p className={cn("text-xs mt-1", textClass('muted', isDark, currentTheme))}>点击左侧分类结构中的文档</p>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
             <div className={cn(
@@ -2098,6 +2736,11 @@ export default function Documents() {
                   setBatchUploadFiles([])
                   setBatchUploadPreview([])
                   setBatchUploadCategory(null)
+                  setBatchUploadEditableData([])
+                  setExpandedItems(new Set())
+                  setSelectedDocId(null)
+                  setEditingItemId(null)
+                  setEditingItemName('')
                 }}
               >
                 取消

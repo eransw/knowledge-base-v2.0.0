@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from '../api/axios'
 import { useMediaUrl } from '../hooks/useMediaUrl'
-import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle, Code, TableIcon, Minus, Quote, ListTodo, Highlighter, Strikethrough, Undo, Redo, Link2, Type, Palette, ListChecks, Grid3X3, Info } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Tag, Calendar, FileText, Download, Share2, Clock, Play, Image, File, ChevronDown, ChevronRight, ChevronLeft, Filter, Layout, Save, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, AlignLeft, AlignCenter, AlignRight, CheckCircle, Code, TableIcon, Minus, Quote, ListTodo, Highlighter, Strikethrough, Undo, Redo, Link2, Type, Palette, ListChecks, Grid3X3, Info, Pencil, Check, X } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
@@ -79,6 +79,14 @@ export default function DocumentDetail() {
   const [noteContent, setNoteContent] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  // 文档编辑相关状态
+  const [editingAttachmentId, setEditingAttachmentId] = useState(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [contentSaving, setContentSaving] = useState(false)
+  // 文档标题编辑状态
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editTitleValue, setEditTitleValue] = useState('')
+  const [titleSaving, setTitleSaving] = useState(false)
 
   // 默认展开所有分类并获取文档统计
   useEffect(() => {
@@ -143,18 +151,14 @@ export default function DocumentDetail() {
         codeBlock: false,
         paragraph: {
           HTMLAttributes: {
-            class: isDark ? 'text-slate-200 leading-relaxed' : 'text-gray-800 leading-relaxed',
+            class: isDark ? 'text-gray-200' : 'text-gray-800',
           },
         },
       }),
-      TextStyle.configure({
-        types: ['textStyle', 'heading', 'paragraph'],
-      }),
+      TextStyle,
       FontFamily,
       FontSize,
-      Color.configure({
-        types: ['textStyle', 'heading'],
-      }),
+      Color,
       CodeBlock.configure({
         HTMLAttributes: {
           class: 'bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono',
@@ -195,7 +199,7 @@ export default function DocumentDetail() {
       setNoteContent(editor.getHTML())
     },
     autofocus: false,
-    injectCSS: false,
+    injectCSS: true,
   })
 
   // 当noteContent变化时更新编辑器内容（支持清空）
@@ -221,6 +225,126 @@ export default function DocumentDetail() {
     }
   }, [noteContent, editor])
 
+  // 文档内容编辑器
+  const documentEditor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+        codeBlock: false,
+        paragraph: {
+          HTMLAttributes: {
+            class: 'leading-relaxed',
+          },
+        },
+      }),
+      TextStyle,
+      FontFamily,
+      FontSize,
+      Color,
+      CodeBlock.configure({
+        HTMLAttributes: {
+          class: 'bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono',
+        },
+      }),
+      TableExtension.configure({
+        resizable: true,
+        useTableHeader: true,
+        HTMLAttributes: {
+          class: 'border-collapse w-full',
+        },
+      }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'list-none pl-0 space-y-1',
+        },
+      }),
+      TaskItem.configure({
+        nested: true,
+        HTMLAttributes: {
+          class: 'flex items-start gap-2 group',
+        },
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Highlight.configure({ 
+        multicolor: true,
+        types: ['textStyle'],
+      }),
+      CharacterCount,
+    ],
+    content: editingContent || '<p>开始编辑文档内容...</p>',
+    onUpdate: ({ editor }) => {
+      setEditingContent(editor.getHTML())
+    },
+    autofocus: false,
+    injectCSS: true,
+  })
+
+  // 当editingContent变化时更新文档编辑器内容
+  useEffect(() => {
+    if (!documentEditor || documentEditor === null || typeof documentEditor !== 'object') return
+    
+    let commands = null
+    try {
+      commands = documentEditor.commands
+    } catch {
+      return
+    }
+    
+    if (!commands) return
+    
+    try {
+      commands.setContent(editingContent || '')
+    } catch {
+      // 内容设置失败，静默忽略
+    }
+  }, [editingContent, documentEditor])
+
+  // 保存文档内容
+  const saveDocumentContent = useCallback(async () => {
+    if (!documentEditor || !id || !editingAttachmentId) {
+      console.error('保存文档内容失败: 编辑器未就绪或参数缺失')
+      return
+    }
+    const content = documentEditor.getHTML()
+    setContentSaving(true)
+    try {
+      const response = await axios.put(`/api/documents/${id}/content`, {
+        content,
+        attachmentId: editingAttachmentId
+      })
+      console.log('文档内容保存成功:', response.data)
+      setEditingAttachmentId(null)
+      setEditingContent('')
+      // 刷新文档详情
+      axios.get(`/api/documents/${id}`).then(res => {
+        setDocument(res.data)
+      })
+    } catch (error) {
+      console.error('保存文档内容失败:', error.response?.data || error.message)
+      alert('保存失败')
+    } finally {
+      setContentSaving(false)
+    }
+  }, [documentEditor, id, editingAttachmentId])
+
+  // 进入编辑模式
+  const enterEditMode = (content) => {
+    setEditingContent(content)
+  }
+
+  // 退出编辑模式
+  const exitEditMode = () => {
+    setEditingAttachmentId(null)
+    setEditingContent('')
+  }
+
   // 保存笔记
   const saveNote = useCallback(async () => {
     if (!editor || !id || !document) {
@@ -242,6 +366,36 @@ export default function DocumentDetail() {
       setNoteSaving(false)
     }
   }, [editor, id, document])
+
+  // 保存文档标题
+  const saveTitle = useCallback(async () => {
+    if (!id || !editTitleValue.trim()) {
+      console.error('保存标题失败: 参数缺失')
+      return
+    }
+    setTitleSaving(true)
+    try {
+      const response = await axios.post(`/api/documents/${id}`, {
+        title: editTitleValue.trim()
+      })
+      console.log('标题保存成功:', response.data)
+      setDocument(prev => prev ? { ...prev, title: editTitleValue.trim() } : null)
+      setIsEditingTitle(false)
+    } catch (error) {
+      console.error('保存标题失败:', error.response?.data || error.message)
+      alert('保存标题失败')
+    } finally {
+      setTitleSaving(false)
+    }
+  }, [id, editTitleValue])
+
+  // 开始编辑标题
+  const startEditTitle = useCallback(() => {
+    if (document?.title) {
+      setEditTitleValue(document.title)
+      setIsEditingTitle(true)
+    }
+  }, [document])
 
   // 获取相关文档
   useEffect(() => {
@@ -885,11 +1039,71 @@ export default function DocumentDetail() {
                   <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${fileTypeClass}`}>
                     {getFileIcon(document.attachments?.[0]?.fileType)}
                   </div>
-                  <div>
-                    <h1 className={cn(
-                      "text-2xl font-bold mb-2",
-                      isDark ? "text-gray-100" : "text-gray-900"
-                    )}>{document.title}</h1>
+                  <div className="flex-1 min-w-0 group">
+                    {isEditingTitle ? (
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={editTitleValue}
+                          onChange={(e) => setEditTitleValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveTitle()
+                            if (e.key === 'Escape') {
+                              setIsEditingTitle(false)
+                              setEditTitleValue(document?.title || '')
+                            }
+                          }}
+                          autoFocus
+                          className={cn(
+                            "flex-1 text-2xl font-bold px-3 py-1.5 rounded-lg border outline-none focus:ring-2 focus:ring-blue-500/30 transition-all",
+                            isDark
+                              ? "bg-slate-700/50 border-slate-600/30 text-gray-100 placeholder:text-gray-500"
+                              : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-400"
+                          )}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={saveTitle}
+                          disabled={titleSaving || !editTitleValue.trim()}
+                          className="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          <Check className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditingTitle(false)
+                            setEditTitleValue(document?.title || '')
+                          }}
+                          disabled={titleSaving}
+                          className={cn(
+                            "h-9 px-3",
+                            isDark ? "border-slate-600/30 hover:bg-slate-700/50" : "border-gray-300 hover:bg-gray-100"
+                          )}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-2">
+                        <h1 className={cn(
+                          "text-2xl font-bold",
+                          isDark ? "text-gray-100" : "text-gray-900"
+                        )}>{document.title}</h1>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={startEditTitle}
+                          className={cn(
+                            "h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity",
+                            isDark ? "hover:bg-slate-700/50 text-gray-400 hover:text-gray-200" : "hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                          )}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                     <div className={cn(
                       "flex items-center gap-4 text-sm",
                       isDark ? "text-gray-400" : "text-gray-500"
@@ -999,8 +1213,16 @@ export default function DocumentDetail() {
 
                     {/* 媒体预览 */}
                     {(attachment.fileType?.includes('video') || attachment.fileType?.includes('audio') || 
-                      attachment.fileType?.includes('image') || attachment.fileType?.includes('pdf')) && (
-                      <AttachmentPreview attachment={attachment} isDark={isDark} />
+                      attachment.fileType?.includes('image') || attachment.fileType?.includes('pdf') ||
+                      attachment.fileType?.includes('docx') || attachment.fileType?.includes('doc')) && (
+                      <AttachmentPreview 
+                        attachment={attachment} 
+                        isDark={isDark} 
+                        onEdit={(content) => {
+                          setEditingAttachmentId(attachment.id)
+                          enterEditMode(content)
+                        }}
+                      />
                     )}
 
                     {/* 文档内容预览 */}
@@ -1028,6 +1250,354 @@ export default function DocumentDetail() {
               <div className={cn("mt-6 rounded-2xl border p-6", isDark ? "bg-slate-800/40 border-slate-700/25" : "bg-gray-50/50 border-gray-200")}>
                 <h2 className={cn("text-lg font-semibold mb-3", isDark ? "text-slate-200" : "text-gray-800")}>文档描述</h2>
                 <p className={cn("leading-relaxed", isDark ? "text-slate-300" : "text-gray-600")}>{document.description}</p>
+              </div>
+            )}
+
+            {/* 文档内容编辑区域 */}
+            {editingAttachmentId && (
+              <div className={cn("mt-6 rounded-2xl border overflow-hidden", isDark ? "bg-slate-800/50 border-slate-700/30" : "bg-white/80 border-gray-200")}>
+                {/* 编辑头部 */}
+                <div className={cn("px-6 py-4 flex items-center justify-between", isDark ? "bg-slate-700/40" : "bg-gray-50")}>
+                  <h2 className={cn("text-lg font-semibold", isDark ? "text-slate-200" : "text-gray-800")}>编辑文档内容</h2>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={exitEditMode}
+                      className={cn(
+                        "border",
+                        isDark ? "border-slate-600/50 text-gray-300 hover:bg-slate-700/40" : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                      )}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={saveDocumentContent}
+                      disabled={contentSaving}
+                      className={cn(
+                        "text-white",
+                        isDark ? "bg-blue-600 hover:bg-blue-500" : "bg-blue-500 hover:bg-blue-600"
+                      )}
+                    >
+                      {contentSaving ? '保存中...' : '保存'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 编辑工具栏 */}
+                <div className={cn("px-6 py-3 border-b", isDark ? "bg-slate-800/30 border-slate-700/30" : "bg-gray-50/80 border-gray-200")}>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {/* 撤销/重做 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().undo().run()}
+                      disabled={!documentEditor || !documentEditor?.can().undo()}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="撤销"
+                    >
+                      <Undo className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().redo().run()}
+                      disabled={!documentEditor || !documentEditor?.can().redo()}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="重做"
+                    >
+                      <Redo className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-400/30 mx-1"></div>
+                    {/* 标题 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleHeading({ level: 1 }).run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="标题1"
+                    >
+                      <Heading1 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="标题2"
+                    >
+                      <Heading2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleHeading({ level: 3 }).run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="标题3"
+                    >
+                      <Heading3 className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-400/30 mx-1"></div>
+                    {/* 格式化 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleBold().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="加粗"
+                    >
+                      <Bold className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleItalic().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="斜体"
+                    >
+                      <Italic className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleUnderline().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="下划线"
+                    >
+                      <Underline className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleStrike().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="删除线"
+                    >
+                      <Strikethrough className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-400/30 mx-1"></div>
+                    {/* 列表 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleBulletList().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="无序列表"
+                    >
+                      <List className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleOrderedList().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="有序列表"
+                    >
+                      <ListOrdered className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleTaskList().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="任务列表"
+                    >
+                      <ListTodo className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-400/30 mx-1"></div>
+                    {/* 对齐 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().setTextAlign('left').run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="左对齐"
+                    >
+                      <AlignLeft className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().setTextAlign('center').run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="居中"
+                    >
+                      <AlignCenter className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().setTextAlign('right').run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="右对齐"
+                    >
+                      <AlignRight className="w-4 h-4" />
+                    </Button>
+                    <div className="w-px h-6 bg-gray-400/30 mx-1"></div>
+                    {/* 其他 */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleCode().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="行内代码"
+                    >
+                      <Code className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleCodeBlock().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="代码块"
+                    >
+                      <CodeBlock className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().toggleBlockquote().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="引用"
+                    >
+                      <Quote className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => documentEditor?.chain().focus().setHorizontalRule().run()}
+                      disabled={!documentEditor}
+                      className={cn(
+                        "h-8 w-8 rounded-lg transition-all duration-200",
+                        isDark 
+                          ? "hover:bg-slate-700/40 text-gray-400 hover:text-gray-200" 
+                          : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                      )}
+                      title="分隔线"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 编辑器内容 */}
+                <div className={cn("p-6", isDark ? "bg-slate-800/40" : "bg-white/80")}>
+                  <EditorContent
+                    editor={documentEditor}
+                    className={cn(
+                      "prose prose-sm max-w-none focus:outline-none",
+                      isDark ? "text-slate-200" : "text-gray-800"
+                    )}
+                    style={{ minHeight: '400px' }}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1155,7 +1725,17 @@ export default function DocumentDetail() {
             
             {/* 字体选择 */}
             <select
-              onChange={(e) => editor?.chain().focus().setFontFamily(e.target.value || null).run()}
+              onChange={(e) => {
+                const value = e.target.value || null
+                console.log('Setting font family:', value)
+                console.log('Editor selection:', editor?.state.selection)
+                console.log('Editor is focused:', editor?.isFocused)
+                const result = editor?.chain().focus().setFontFamily(value).run()
+                console.log('Font family command result:', result)
+                setTimeout(() => {
+                  console.log('Editor content after font change:', editor?.getHTML())
+                }, 100)
+              }}
               disabled={!editor}
               className={cn(
                 "h-8 px-2 text-sm border rounded-lg disabled:opacity-50 cursor-pointer transition-all duration-200",
@@ -1175,7 +1755,15 @@ export default function DocumentDetail() {
             </select>
             {/* 字号选择 */}
             <select
-              onChange={(e) => editor?.chain().focus().setFontSize(e.target.value || null).run()}
+              onChange={(e) => {
+                const value = e.target.value || null
+                console.log('Setting font size:', value)
+                const result = editor?.chain().focus().setFontSize(value).run()
+                console.log('Font size command result:', result)
+                setTimeout(() => {
+                  console.log('Editor content after size change:', editor?.getHTML())
+                }, 100)
+              }}
               disabled={!editor}
               className={cn(
                 "h-8 px-2 text-sm border rounded-lg disabled:opacity-50 cursor-pointer transition-all duration-200",
@@ -1700,16 +2288,14 @@ export default function DocumentDetail() {
           <div className={cn(
             "min-h-[400px] border rounded-xl m-3",
             isDark ? "bg-slate-700/20 border-slate-700/20" : "bg-white border-gray-200"
-          )}>
-            <div className="prose prose-sm max-w-none p-4 focus:outline-none">
+          )} style={{ fontFamily: '', fontSize: '' }}>
+            <div className="max-w-none p-4 focus:outline-none" style={{ fontFamily: '', fontSize: '' }}>
               <EditorContent 
                 editor={editor} 
                 className="min-h-[400px] focus:outline-none"
                 style={{ 
                   whiteSpace: 'pre-wrap',
                   lineHeight: '2',
-                  fontSize: '15px',
-                  color: isDark ? '#e2e8f0' : '#374151',
                   caretColor: isDark ? '#60a5fa' : '#3b82f6',
                 }}
               />

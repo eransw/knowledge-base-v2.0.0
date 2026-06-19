@@ -4,6 +4,7 @@ import { Repository, In, IsNull } from 'typeorm';
 import { Document } from './document.entity';
 import { FileAttachment } from './file-attachment.entity';
 import { Category } from '../category/category.entity';
+import { Tag } from '../tag/tag.entity';
 import { Note } from '../note/note.entity';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -19,6 +20,8 @@ export class DocumentService {
     private fileAttachmentRepository: Repository<FileAttachment>,
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
+    @InjectRepository(Tag)
+    private tagRepository: Repository<Tag>,
     @InjectRepository(Note)
     private noteRepository: Repository<Note>,
   ) {}
@@ -290,7 +293,8 @@ export class DocumentService {
     userId: number, 
     files: any[], 
     paths: string[], 
-    parentCategory: Category | null
+    parentCategory: Category | null,
+    metadata: { path: string; description: string; tags: string[] }[] = []
   ): Promise<{ documents: Document[], categories: Category[] }> {
     try {
       console.log('=== batchUpload service called ===');
@@ -423,17 +427,35 @@ export class DocumentService {
         // 为每个分组创建文档
         for (const group of Object.values(documentGroups)) {
           const firstFile = group[0];
-          // 从文件名中提取文档标题（去掉数字和扩展名）
-          const nameWithoutExt = firstFile.fileName.replace(/\.[^/.]+$/, '');
-          const cleanName = nameWithoutExt.replace(/\d+/g, '').trim() || firstFile.fileName.replace(/\.[^/.]+$/, '');
+          // 使用完整文件名（不含扩展名）作为文档标题，与前端保持一致
+          const cleanName = firstFile.fileName.replace(/\.[^/.]+$/, '');
+          
+          // 查找对应的元数据 - 使用前端传入的完整路径
+          const docPath = dirPath ? `${dirPath}/${cleanName}` : cleanName;
+          const docMetadata = metadata.find(m => m.path === docPath) || { description: '', tags: [] };
           
           // 创建文档
           const document = this.documentRepository.create({
             title: cleanName,
             content: '',
+            description: docMetadata.description || '',
             userId,
             category: currentParent
           });
+          
+          // 处理标签
+          if (docMetadata.tags && docMetadata.tags.length > 0) {
+            const documentTags: Tag[] = [];
+            for (const tagName of docMetadata.tags) {
+              let tag = await this.tagRepository.findOne({ where: { name: tagName, userId } });
+              if (!tag) {
+                tag = this.tagRepository.create({ name: tagName, userId });
+                tag = await this.tagRepository.save(tag);
+              }
+              documentTags.push(tag);
+            }
+            document.tags = documentTags;
+          }
           
           // 处理附件
           const attachments: FileAttachment[] = [];

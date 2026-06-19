@@ -146,9 +146,20 @@ export class DocumentController {
         }
       }
       
-      console.log('Parent category:', parentCategory?.id || null);
+      // 获取文档元数据（描述和标签）
+      let metadata: { path: string; description: string; tags: string[] }[] = [];
+      if (req.body.metadata) {
+        try {
+          metadata = JSON.parse(req.body.metadata);
+        } catch (e) {
+          console.log('Failed to parse metadata:', e);
+        }
+      }
       
-      const result = await this.documentService.batchUpload(userId, files, paths, parentCategory);
+      console.log('Parent category:', parentCategory?.id || null);
+      console.log('Metadata count:', metadata.length);
+      
+      const result = await this.documentService.batchUpload(userId, files, paths, parentCategory, metadata);
       console.log('Batch upload completed successfully:', result);
       return result;
     } catch (error: any) {
@@ -396,5 +407,20 @@ export class DocumentController {
     // 不设置 Content-Disposition 或设置为 inline，允许浏览器预览
     res.setHeader('Content-Disposition', 'inline');
     res.sendFile(filePath);
+  }
+
+  @Put(':id/content')
+  @UseGuards(AuthGuard('jwt'))
+  async updateContent(@Req() req: Request, @Param('id') id: string, @Body() body: { content: string }) {
+    const userId = req.user['id'];
+    try {
+      const document = await this.documentService.update(userId, +id, {
+        content: body.content
+      });
+      return document;
+    } catch (error) {
+      console.error('Update document content error:', error);
+      throw error;
+    }
   }
 }
