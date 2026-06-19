@@ -174,12 +174,17 @@ export default function SearchSettings() {
           isDark ? "bg-slate-800/50 border-slate-700/30 hover:bg-slate-700/50" : "bg-white/80 border-gray-200 hover:bg-gray-100"
         )}>
           <div className="flex items-center gap-3">
-            <FolderOpen className={cn("w-5 h-5", isDark ? "text-blue-400" : "text-blue-500")} />
-            <span className={cn(isDark ? "text-gray-200" : "text-gray-800")}>{category.name}</span>
-            <Badge variant="secondary" className="text-xs">
-              {category.docCount || 0} 文档
-            </Badge>
-          </div>
+              <FolderOpen className={cn("w-5 h-5", isDark ? "text-blue-400" : "text-blue-500")} />
+              <span className={cn(isDark ? "text-gray-100" : "text-gray-800")}>{category.name}</span>
+              <Badge className={cn(
+                "text-xs",
+                isDark 
+                  ? "bg-blue-500/20 text-blue-300 border-blue-500/30" 
+                  : "bg-gray-100 text-gray-600"
+              )}>
+                {category.docCount || 0} 文档
+              </Badge>
+            </div>
           <Button
             size="sm"
             variant="outline"
@@ -187,10 +192,12 @@ export default function SearchSettings() {
             disabled={indexing}
             className={cn(
               "gap-1",
-              isDark ? "border-slate-600/30 hover:bg-slate-700/50" : "border-gray-300 hover:bg-gray-100"
+              isDark 
+                ? "border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:border-blue-400" 
+                : "border-gray-300 hover:bg-gray-100"
             )}
           >
-            <Database className="w-4 h-4" />
+            <Database className={cn("w-4 h-4", isDark ? "text-blue-400" : "text-gray-600")} />
             建立索引
           </Button>
         </div>
